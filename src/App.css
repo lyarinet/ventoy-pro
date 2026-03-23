@@ -138,6 +138,59 @@
   color: #c9d1d9;
 }
 
+.designer-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.preview-hero-card {
+  background:
+    radial-gradient(circle at top, rgba(88, 166, 255, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(22, 27, 34, 0.98), rgba(13, 17, 23, 0.98));
+}
+
+.side-tabs-list {
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+  height: auto !important;
+  background: transparent !important;
+  border: 0 !important;
+  padding: 0 !important;
+}
+
+.side-tabs-trigger {
+  display: flex !important;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: auto !important;
+  justify-content: flex-start;
+  white-space: normal !important;
+  border-radius: 20px !important;
+  border: 1px solid rgba(110, 118, 129, 0.16) !important;
+  background: linear-gradient(180deg, rgba(13, 17, 23, 0.92), rgba(20, 26, 35, 0.9)) !important;
+  padding: 12px !important;
+  text-align: left;
+  color: #c9d1d9 !important;
+}
+
+.side-tabs-trigger:hover {
+  border-color: rgba(88, 166, 255, 0.28) !important;
+  background: linear-gradient(180deg, rgba(18, 25, 35, 0.98), rgba(28, 37, 48, 0.95)) !important;
+}
+
+.side-tabs-trigger[data-state="active"] {
+  border-color: rgba(88, 166, 255, 0.35) !important;
+  background:
+    linear-gradient(180deg, rgba(17, 25, 36, 0.98), rgba(22, 33, 48, 0.98)),
+    linear-gradient(135deg, rgba(88, 166, 255, 0.22), rgba(46, 160, 67, 0.14)) !important;
+  box-shadow:
+    0 18px 30px rgba(0, 0, 0, 0.24),
+    0 0 0 1px rgba(88, 166, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
 @media (min-width: 768px) {
   .control-tabs-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -145,6 +198,17 @@
 }
 
 @media (min-width: 1280px) {
+  .designer-layout {
+    grid-template-columns: minmax(0, 0.9fr) 270px minmax(0, 1.15fr);
+    align-items: start;
+  }
+
+  .preview-column-inner,
+  .side-menu-column-inner {
+    position: sticky;
+    top: 112px;
+  }
+
   .control-tabs-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -304,6 +368,11 @@ button:active:not(:disabled) {
     width: 38px;
     height: 38px;
     border-radius: 14px;
+  }
+
+  .side-tabs-trigger {
+    border-radius: 16px !important;
+    padding: 10px !important;
   }
 }
 

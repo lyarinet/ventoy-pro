@@ -1080,6 +1080,8 @@ function App() {
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
   const previewMenuStyle = getPreviewMenuStyle(config);
   const activeMenuStylePreset = MENU_STYLE_PRESETS.find((preset) => preset.id === config.menuStyle) ?? MENU_STYLE_PRESETS[1];
+  const activeTabMeta = TAB_ITEMS.find((item) => item.value === activeTab);
+  const activeWizardMeta = WIZARD_STEPS.find((step) => step.value === activeTab || step.value === wizardStep);
   const backgroundPreview = buildBackgroundPreviewUrl(config.backgroundSource, config.backgroundFile);
   const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
   const currentWizardIndex = WIZARD_STEPS.findIndex((step) => step.value === wizardStep);
@@ -1634,12 +1636,12 @@ function App() {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `ventoy-theme-${Date.now()}.zip`;
+        link.download = `ventoy-full-pack-${Date.now()}.zip`;
         link.click();
-        toast.success('Theme package downloaded!');
+        toast.success('One-click full pack downloaded!');
       }
     } catch (error) {
-      toast.error('Error downloading theme package');
+      toast.error('Error downloading full pack');
     } finally {
       setIsDownloading(false);
     }
@@ -1795,31 +1797,244 @@ function App() {
       )}
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-          {/* Left Panel - Controls */}
-          <Card className="bg-[#161b22] border-[#30363d] order-2 xl:order-1">
-            <CardHeader className="pb-2 px-4 sm:px-6">
-              <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-[#c9d1d9]">
-                <Settings2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff]" />
-                Advanced Customization
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <div className="mb-5 rounded-[28px] border border-[#30363d] bg-[#0d1117] p-4 sm:p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Theme Wizard</p>
-                      <p className="text-sm font-medium text-[#e6edf3]">Beginner-friendly guided setup for your Ventoy theme.</p>
-                      <p className="text-xs text-[#8b949e]">
-                        Follow the guided steps: Background, Colors, Fonts, Icons, Layout, Advanced, then Download.
-                      </p>
+      <main className="max-w-[1600px] mx-auto px-3 sm:px-4 py-4 sm:py-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="designer-layout">
+            <div className="preview-column">
+              <div className="preview-column-inner space-y-4">
+                <Card className="preview-hero-card overflow-hidden border-[#30363d]">
+                  <CardHeader className="border-b border-[#30363d] px-4 pb-3 pt-4 sm:px-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Live Station</p>
+                        <CardTitle className="mt-2 flex items-center gap-2 text-base sm:text-lg text-[#e6edf3]">
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-[#58a6ff]" />
+                          Preview Always Visible
+                        </CardTitle>
+                        <p className="mt-1 text-xs text-[#8b949e]">
+                          Preview left side par sticky hai, is liye settings change karte waqt upar wapas scroll nahi karna padega.
+                        </p>
+                      </div>
+                      <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
+                        {config.resolution}
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#30363d] bg-[#161b22] px-4 py-3">
+                  </CardHeader>
+                  <CardContent className="space-y-4 px-4 py-4 sm:px-6">
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2">
+                      <MonitorPlay className="w-4 h-4 text-[#8b949e] flex-shrink-0" />
+                      {RESOLUTION_OPTIONS.map((res) => (
+                        <button
+                          key={res.value}
+                          onClick={() => updateConfig('resolution', res.value)}
+                          className={`px-2 py-1 rounded-md text-[10px] sm:text-xs whitespace-nowrap transition-colors ${
+                            config.resolution === res.value
+                              ? 'bg-[#238636] text-white'
+                              : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
+                          }`}
+                        >
+                          {res.value}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div
+                      ref={previewCaptureRef}
+                      className={`relative mx-auto overflow-hidden rounded-[26px] border border-[#30363d] shadow-2xl ${previewAnimationClass}`}
+                      style={{
+                        aspectRatio: getAspectRatio(config.resolution),
+                        backgroundColor: config.desktopColor,
+                        backgroundImage: backgroundPreview ? `url(${backgroundPreview})` : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        boxShadow: config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined,
+                        animationDuration: `${config.animationSpeed}ms`,
+                      }}
+                    >
+                      <div
+                        className="absolute top-2 sm:top-4 left-0 right-0 text-center font-bold px-2 sm:px-4 truncate"
+                        style={{
+                          color: config.headerColor,
+                          fontSize: `${config.titleFontSize * previewMenuStyle.titleFontScale}px`,
+                          fontFamily: config.titleFont,
+                          textShadow: config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined,
+                        }}
+                      >
+                        {config.headerText}
+                      </div>
+
+                      <div
+                        className="absolute overflow-hidden"
+                        style={{
+                          left: `${config.menuLeft}%`,
+                          top: `${config.menuTop}%`,
+                          width: `${config.menuWidth}%`,
+                          height: `${config.menuHeight}%`,
+                          borderColor: config.primaryColor,
+                          backgroundColor: previewMenuStyle.panelBackground,
+                          borderWidth: `${previewMenuStyle.borderWidth}px`,
+                          borderStyle: 'solid',
+                          borderRadius: `${previewMenuStyle.borderRadius}px`,
+                          boxShadow: previewMenuStyle.boxShadow,
+                          backdropFilter: previewMenuStyle.backdropFilter,
+                        }}
+                      >
+                        {previewMenuStyle.terminalHeader && (
+                          <div
+                            className="border-b px-2 py-1 text-[8px] uppercase tracking-[0.22em] sm:text-[9px]"
+                            style={{ borderColor: `${config.primaryColor}55`, color: config.primaryColor }}
+                          >
+                            boot://ventoy/session
+                          </div>
+                        )}
+                        <div className="space-y-0.5 sm:space-y-1" style={{ padding: `${previewMenuStyle.panelPadding}px` }}>
+                          {previewItems.map((item, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center transition-all"
+                              style={{
+                                color: i === 0 ? config.selectedTextColor : config.normalTextColor,
+                                backgroundColor: i === 0 ? previewMenuStyle.selectedFill : 'transparent',
+                                borderRadius: `${previewMenuStyle.itemBorderRadius}px`,
+                                fontSize: `${config.itemFontSize * previewMenuStyle.itemFontScale}px`,
+                                fontFamily: config.itemFont,
+                                gap: `${previewMenuStyle.itemGap}px`,
+                                padding: `${previewMenuStyle.itemPaddingY}px ${previewMenuStyle.itemPaddingX}px`,
+                              }}
+                            >
+                              {previewMenuStyle.showSelectionMarker && (
+                                <span style={{ color: i === 0 ? config.primaryColor : `${config.normalTextColor}99` }}>
+                                  {i === 0 ? previewMenuStyle.marker : '·'}
+                                </span>
+                              )}
+                              {config.showIcons && (
+                                iconPreviews[item.icon] ? (
+                                  <img src={iconPreviews[item.icon]} alt={item.icon} className="h-[14px] w-[14px] object-contain" />
+                                ) : customIconTypes.find((icon) => icon.id === item.icon) ? (
+                                  <div
+                                    className="flex h-[14px] w-[14px] items-center justify-center rounded-full text-[8px] font-bold text-white"
+                                    style={{ backgroundColor: customIconTypes.find((icon) => icon.id === item.icon)?.color }}
+                                  >
+                                    {item.name.charAt(0).toUpperCase()}
+                                  </div>
+                                ) : (
+                                  <div style={{ color: ICON_TYPES.find((t) => t.id === item.icon)?.color }}>
+                                    <OSLogo type={item.icon} size={14} />
+                                  </div>
+                                )
+                              )}
+                              <span className="truncate">{item.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {config.showProgressBar && (
+                        <>
+                          <div
+                            className="absolute left-1/2 -translate-x-1/2 h-2 sm:h-4 rounded-full overflow-hidden border"
+                            style={{
+                              top: previewMenuStyle.progressTop,
+                              width: previewMenuStyle.progressWidth,
+                              backgroundColor: config.progressBgColor,
+                              borderColor: config.primaryColor,
+                              borderRadius: config.roundedCorners ? '999px' : '0px',
+                            }}
+                          >
+                            <div
+                              className="h-full transition-all duration-500"
+                              style={{
+                                width: '60%',
+                                background: `linear-gradient(90deg, ${config.progressFgColor}, ${config.accentColor})`,
+                                boxShadow: config.glowEffect ? `0 0 10px ${config.progressFgColor}` : undefined,
+                              }}
+                            />
+                          </div>
+                          <div
+                            className="absolute text-center text-[8px] sm:text-xs font-medium"
+                            style={{
+                              top: '86%',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              color: config.normalTextColor,
+                            }}
+                          >
+                            Booting in {config.timeout}s
+                          </div>
+                        </>
+                      )}
+
+                      {config.showFooter && (
+                        <div
+                          className="absolute bottom-1 sm:bottom-2 left-0 right-0 text-center text-[8px] sm:text-[10px]"
+                          style={{ color: config.footerColor }}
+                        >
+                          Use ↑↓ to select, Enter to boot {config.passwordProtected && '• 🔒 Protected'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2">
+                      <Button onClick={captureBootScreen} disabled={isCapturing} variant="outline" className="border-[#30363d] bg-[#0d1117] hover:bg-[#21262d] text-[#c9d1d9] h-auto justify-start py-3 text-xs sm:text-sm">
+                        {isCapturing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
+                        <div className="text-left">
+                          <div className="font-medium">Boot Screen Capture</div>
+                          <div className="text-[10px] text-[#6e7681]">PNG snapshot of the live preview</div>
+                        </div>
+                      </Button>
+
+                      <Button onClick={generateThemeFiles} disabled={isGenerating} variant="outline" className="border-[#30363d] bg-[#0d1117] hover:bg-[#21262d] text-[#c9d1d9] h-auto justify-start py-3 text-xs sm:text-sm">
+                        {isGenerating ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <FileCode className="w-4 h-4 mr-2" />}
+                        <div className="text-left">
+                          <div className="font-medium">Generate Files</div>
+                          <div className="text-[10px] text-[#6e7681]">theme.txt + ventoy.json</div>
+                        </div>
+                      </Button>
+
+                      <Button onClick={downloadThemePackage} disabled={isDownloading} className="bg-gradient-to-r from-[#a371f7] via-[#58a6ff] to-[#238636] hover:opacity-90 text-white h-auto justify-start py-3 text-xs sm:text-sm">
+                        {isDownloading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                        <div className="text-left">
+                          <div className="font-medium">One-Click Full Pack</div>
+                          <div className="text-[10px] text-white/70">Ready `ventoy/` folder ZIP</div>
+                        </div>
+                      </Button>
+                    </div>
+
+                    <Card className="border-[#30363d] bg-[#0d1117]">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <Info className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff] flex-shrink-0 mt-0.5" />
+                          <div className="text-xs sm:text-sm text-[#8b949e]">
+                            <p className="mb-2 font-medium text-[#c9d1d9]">Quick Install</p>
+                            <ol className="space-y-1 text-[10px] sm:text-xs">
+                              <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Extract ZIP file</li>
+                              <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Copy the extracted <code className="text-[#58a6ff] bg-[#21262d] px-1 rounded">ventoy</code> folder to USB root</li>
+                              <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Boot and enjoy your custom theme!</li>
+                            </ol>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div className="side-menu-column">
+              <div className="side-menu-column-inner space-y-4">
+                <Card className="border-[#30363d] bg-[#161b22]">
+                  <CardHeader className="pb-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Side Menu</p>
+                    <CardTitle className="mt-2 text-base text-[#e6edf3]">Section Navigator</CardTitle>
+                    <p className="text-xs text-[#8b949e]">
+                      Scroll right side controls freely. Preview left side par hamesha visible rahega.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#30363d] bg-[#0d1117] px-3 py-3">
                       <div>
                         <p className="text-sm font-medium text-[#c9d1d9]">Wizard Mode</p>
-                        <p className="text-[11px] text-[#8b949e]">Show one guided step at a time</p>
+                        <p className="text-[11px] text-[#8b949e]">Guided flow for beginners</p>
                       </div>
                       <Switch
                         checked={wizardMode}
@@ -1827,15 +2042,15 @@ function App() {
                           setWizardMode(checked);
                           if (checked) {
                             goToWizardStep(wizardStep);
+                          } else if (activeTab === 'download') {
+                            setActiveTab('templates');
                           }
                         }}
                       />
                     </div>
-                  </div>
 
-                  {wizardMode && (
-                    <div className="mt-4 space-y-4">
-                      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                    {wizardMode ? (
+                      <div className="space-y-2">
                         {WIZARD_STEPS.map((step, index) => {
                           const isActive = step.value === wizardStep;
                           const isComplete = index < currentWizardIndex;
@@ -1845,123 +2060,81 @@ function App() {
                               key={step.value}
                               type="button"
                               onClick={() => goToWizardStep(step.value)}
-                              className={`rounded-2xl border px-3 py-3 text-left transition-all ${
+                              className={`w-full rounded-2xl border px-3 py-3 text-left transition-all ${
                                 isActive
-                                  ? 'border-[#58a6ff] bg-[#161b22] shadow-lg shadow-blue-500/10'
+                                  ? 'border-[#58a6ff] bg-[#0d1117]'
                                   : isComplete
-                                    ? 'border-[#238636]/40 bg-[#0d1117]'
-                                    : 'border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]'
+                                    ? 'border-[#238636]/30 bg-[#0d1117]'
+                                    : 'border-[#30363d] bg-[#111827] hover:border-[#58a6ff]'
                               }`}
                             >
-                              <div className="mb-2 flex items-center justify-between gap-2">
-                                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8b949e]">
-                                  Step {index + 1}
-                                </span>
-                                {isComplete ? (
-                                  <Check className="h-4 w-4 text-[#238636]" />
-                                ) : null}
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[#8b949e]">Step {index + 1}</p>
+                                  <p className="text-sm font-semibold text-[#e6edf3]">{step.title}</p>
+                                </div>
+                                {isComplete ? <Check className="h-4 w-4 text-[#238636]" /> : null}
                               </div>
-                              <p className="text-sm font-semibold text-[#e6edf3]">{step.title}</p>
                             </button>
                           );
                         })}
                       </div>
+                    ) : (
+                      <TooltipProvider>
+                        <TabsList className="side-tabs-list">
+                          {TAB_ITEMS.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <Tooltip key={item.value}>
+                                <TooltipTrigger asChild>
+                                  <TabsTrigger value={item.value} className="side-tabs-trigger">
+                                    <span className={`flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg shadow-black/20`}>
+                                      <Icon className="h-4 w-4" />
+                                    </span>
+                                    <span className="min-w-0 flex-1 text-left">
+                                      <span className="block text-sm font-semibold text-[#e6edf3]">{item.label}</span>
+                                      <span className="block text-[11px] leading-4 text-[#8b949e]">{item.hint}</span>
+                                    </span>
+                                  </TabsTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
+                                  <p className="text-xs">{item.tooltip}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })}
+                        </TabsList>
+                      </TooltipProvider>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
 
-                      <div className="rounded-2xl border border-[#30363d] bg-[#161b22]/70 px-4 py-3">
-                        <p className="text-sm font-semibold text-[#e6edf3]">{currentWizardStep.title}</p>
-                        <p className="text-xs text-[#8b949e]">{currentWizardStep.subtitle}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {!wizardMode && (
-                <div className="control-tabs-shell mb-5 overflow-hidden rounded-[28px] border border-[#30363d]">
-                  <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+            <div className="control-panel-column">
+              <Card className="border-[#30363d] bg-[#161b22]">
+                <CardHeader className="border-b border-[#30363d] pb-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Control Deck</p>
-                      <p className="text-xs text-[#8b949e]">Choose a section and shape your Ventoy menu from here.</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Editor Panel</p>
+                      <CardTitle className="mt-2 flex items-center gap-2 text-base sm:text-lg text-[#e6edf3]">
+                        <Settings2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff]" />
+                        {wizardMode
+                          ? currentWizardStep.title
+                          : activeTabMeta?.label ?? activeWizardMeta?.title ?? 'Customization'}
+                      </CardTitle>
+                      <p className="mt-1 text-xs text-[#8b949e]">
+                        {wizardMode
+                          ? currentWizardStep.subtitle
+                          : activeTabMeta?.tooltip ?? activeWizardMeta?.subtitle ?? 'Adjust your Ventoy theme settings from here.'}
+                      </p>
                     </div>
-                    <div className="hidden rounded-full border border-[#30363d] bg-[#0d1117]/80 px-3 py-1 text-[11px] font-medium text-[#c9d1d9] sm:block">
-                      Active: {TAB_ITEMS.find((item) => item.value === activeTab)?.label ?? 'Templates'}
+                    <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
+                      {wizardMode ? `Step ${currentWizardIndex + 1} / ${WIZARD_STEPS.length}` : `Section: ${activeTabMeta?.shortLabel ?? activeTab}`}
                     </div>
                   </div>
-
-                  <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-3">
-                    <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8b949e]">Quick Access</span>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => setActiveTab('marketplace')}
-                      className="h-8 rounded-full bg-gradient-to-r from-[#1f6feb] via-[#58a6ff] to-[#238636] px-3 text-xs text-white hover:opacity-90"
-                    >
-                      <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                      Open Share Themes
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setActiveTab('background')}
-                      className="h-8 rounded-full border-[#30363d] bg-[#0d1117] px-3 text-xs text-[#c9d1d9] hover:bg-[#21262d]"
-                    >
-                      <Image className="mr-1.5 h-3.5 w-3.5" />
-                      Backgrounds
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setActiveTab('layout')}
-                      className="h-8 rounded-full border-[#30363d] bg-[#0d1117] px-3 text-xs text-[#c9d1d9] hover:bg-[#21262d]"
-                    >
-                      <Layout className="mr-1.5 h-3.5 w-3.5" />
-                      Menu Styles
-                    </Button>
-                  </div>
-
-                  <TooltipProvider>
-                    <TabsList className="control-tabs control-tabs-grid grid h-auto gap-3 bg-transparent p-3">
-                      {TAB_ITEMS.map((item) => {
-                        const Icon = item.icon;
-
-                        return (
-                          <Tooltip key={item.value}>
-                            <TooltipTrigger asChild>
-                              <TabsTrigger value={item.value} className="control-tab-trigger h-auto min-h-[150px] flex-col items-start justify-start gap-4 rounded-[22px] border border-transparent px-4 py-4 text-left whitespace-normal">
-                                <div className="flex w-full items-start justify-between gap-3">
-                                  <span className={`tab-icon flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg shadow-black/25`}>
-                                    <Icon className="h-4 w-4" />
-                                  </span>
-                                  <ChevronRight className="tab-arrow mt-1 hidden h-4 w-4 text-[#6e7681] sm:block" />
-                                </div>
-
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-2 text-sm font-semibold text-[#e6edf3]">
-                                    <span className="sm:hidden">{item.shortLabel}</span>
-                                    <span className="hidden sm:inline">{item.label}</span>
-                                    {item.value === 'marketplace' ? (
-                                      <span className="rounded-full border border-[#58a6ff]/40 bg-[#58a6ff]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#7dd3fc]">
-                                        New
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <p className="tab-hint hidden text-[11px] leading-4 text-[#8b949e] sm:block">
-                                    {item.hint}
-                                  </p>
-                                </div>
-                              </TabsTrigger>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                              <p className="text-xs">{item.tooltip}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                    </TabsList>
-                  </TooltipProvider>
-                </div>
-                )}
+                </CardHeader>
+                <CardContent className="px-4 py-5 sm:px-6">
 
                 {/* Templates Tab */}
                 <TabsContent value="templates" className="space-y-4 mt-0">
@@ -2634,8 +2807,8 @@ function App() {
                     <Button onClick={downloadThemePackage} disabled={isDownloading} className="h-auto justify-start bg-gradient-to-r from-[#a371f7] via-[#58a6ff] to-[#238636] py-4 text-left text-white hover:opacity-90">
                       {isDownloading ? <RefreshCw className="mr-3 h-4 w-4 animate-spin" /> : <Download className="mr-3 h-4 w-4" />}
                       <div>
-                        <div className="font-medium">Download Package</div>
-                        <div className="text-[11px] text-white/75">Complete ZIP with your assets, icons, and theme files</div>
+                        <div className="font-medium">One-Click Full Pack</div>
+                        <div className="text-[11px] text-white/75">Ready `ventoy/` folder ZIP with theme, backgrounds, and icons</div>
                       </div>
                     </Button>
                   </div>
@@ -2826,233 +2999,11 @@ function App() {
                     </div>
                   </div>
                 )}
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Right Panel - Preview */}
-          <div className="space-y-4 order-1 xl:order-2">
-            {/* Preview Resolution Selector */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              <MonitorPlay className="w-4 h-4 text-[#8b949e] flex-shrink-0" />
-              {RESOLUTION_OPTIONS.map((res) => (
-                <button
-                  key={res.value}
-                  onClick={() => updateConfig('resolution', res.value)}
-                  className={`px-2 py-1 rounded-md text-[10px] sm:text-xs whitespace-nowrap transition-colors ${
-                    config.resolution === res.value 
-                      ? 'bg-[#238636] text-white' 
-                      : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
-                  }`}
-                >
-                  {res.value}
-                </button>
-              ))}
+                </CardContent>
+              </Card>
             </div>
-
-            <Card className="bg-[#161b22] border-[#30363d] overflow-hidden">
-              <CardHeader className="pb-2 px-4 sm:px-6">
-                <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-[#c9d1d9]">
-                  <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff]" />
-                  Live Preview ({config.resolution})
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6">
-                <div 
-                  ref={previewCaptureRef}
-                  className={`relative rounded-xl overflow-hidden mx-auto shadow-2xl ${previewAnimationClass}`}
-                  style={{ 
-                    aspectRatio: getAspectRatio(config.resolution),
-                    maxHeight: '400px',
-                    backgroundColor: config.desktopColor,
-                    backgroundImage: backgroundPreview ? `url(${backgroundPreview})` : undefined,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    boxShadow: config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined,
-                    animationDuration: `${config.animationSpeed}ms`,
-                  }}
-                >
-                  {/* Header */}
-                  <div 
-                    className="absolute top-2 sm:top-4 left-0 right-0 text-center font-bold px-2 sm:px-4 truncate"
-                    style={{ 
-                      color: config.headerColor,
-                      fontSize: `${config.titleFontSize * previewMenuStyle.titleFontScale}px`,
-                      fontFamily: config.titleFont,
-                      textShadow: config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined,
-                    }}
-                  >
-                    {config.headerText}
-                  </div>
-
-                  {/* Boot Menu */}
-                  <div
-                    className="absolute overflow-hidden"
-                    style={{
-                      left: `${config.menuLeft}%`,
-                      top: `${config.menuTop}%`,
-                      width: `${config.menuWidth}%`,
-                      height: `${config.menuHeight}%`,
-                      borderColor: config.primaryColor,
-                      backgroundColor: previewMenuStyle.panelBackground,
-                      borderWidth: `${previewMenuStyle.borderWidth}px`,
-                      borderStyle: 'solid',
-                      borderRadius: `${previewMenuStyle.borderRadius}px`,
-                      boxShadow: previewMenuStyle.boxShadow,
-                      backdropFilter: previewMenuStyle.backdropFilter,
-                    }}
-                  >
-                    {previewMenuStyle.terminalHeader && (
-                      <div
-                        className="border-b px-2 py-1 text-[8px] uppercase tracking-[0.22em] sm:text-[9px]"
-                        style={{ borderColor: `${config.primaryColor}55`, color: config.primaryColor }}
-                      >
-                        boot://ventoy/session
-                      </div>
-                    )}
-                    <div
-                      className="space-y-0.5 sm:space-y-1"
-                      style={{ padding: `${previewMenuStyle.panelPadding}px` }}
-                    >
-                      {previewItems.map((item, i) => (
-                        <div
-                          key={i}
-                          className="flex items-center transition-all"
-                          style={{ 
-                            color: i === 0 ? config.selectedTextColor : config.normalTextColor,
-                            backgroundColor: i === 0 ? previewMenuStyle.selectedFill : 'transparent',
-                            borderRadius: `${previewMenuStyle.itemBorderRadius}px`,
-                            fontSize: `${config.itemFontSize * previewMenuStyle.itemFontScale}px`,
-                            fontFamily: config.itemFont,
-                            gap: `${previewMenuStyle.itemGap}px`,
-                            padding: `${previewMenuStyle.itemPaddingY}px ${previewMenuStyle.itemPaddingX}px`,
-                          }}
-                        >
-                          {previewMenuStyle.showSelectionMarker && (
-                            <span style={{ color: i === 0 ? config.primaryColor : `${config.normalTextColor}99` }}>
-                              {i === 0 ? previewMenuStyle.marker : '·'}
-                            </span>
-                          )}
-                          {config.showIcons && (
-                            iconPreviews[item.icon] ? (
-                              <img
-                                src={iconPreviews[item.icon]}
-                                alt={item.icon}
-                                className="h-[14px] w-[14px] object-contain"
-                              />
-                            ) : customIconTypes.find((icon) => icon.id === item.icon) ? (
-                              <div
-                                className="flex h-[14px] w-[14px] items-center justify-center rounded-full text-[8px] font-bold text-white"
-                                style={{ backgroundColor: customIconTypes.find((icon) => icon.id === item.icon)?.color }}
-                              >
-                                {item.name.charAt(0).toUpperCase()}
-                              </div>
-                            ) : (
-                              <div style={{ color: ICON_TYPES.find(t => t.id === item.icon)?.color }}>
-                                <OSLogo type={item.icon} size={14} />
-                              </div>
-                            )
-                          )}
-                          <span className="truncate">{item.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  {config.showProgressBar && (
-                    <>
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 h-2 sm:h-4 rounded-full overflow-hidden border"
-                        style={{ 
-                          top: previewMenuStyle.progressTop,
-                          width: previewMenuStyle.progressWidth,
-                          backgroundColor: config.progressBgColor,
-                          borderColor: config.primaryColor,
-                          borderRadius: config.roundedCorners ? '999px' : '0px',
-                        }}
-                      >
-                        <div
-                          className="h-full transition-all duration-500"
-                          style={{ 
-                            width: '60%',
-                            background: `linear-gradient(90deg, ${config.progressFgColor}, ${config.accentColor})`,
-                            boxShadow: config.glowEffect ? `0 0 10px ${config.progressFgColor}` : undefined,
-                          }}
-                        />
-                      </div>
-                      <div 
-                        className="absolute text-center text-[8px] sm:text-xs font-medium"
-                        style={{ 
-                          top: '86%',
-                          left: '50%',
-                          transform: 'translateX(-50%)',
-                          color: config.normalTextColor,
-                        }}
-                      >
-                        Booting in {config.timeout}s
-                      </div>
-                    </>
-                  )}
-
-                  {/* Footer */}
-                  {config.showFooter && (
-                    <div 
-                      className="absolute bottom-1 sm:bottom-2 left-0 right-0 text-center text-[8px] sm:text-[10px]"
-                      style={{ color: config.footerColor }}
-                    >
-                      Use ↑↓ to select, Enter to boot {config.passwordProtected && '• 🔒 Protected'}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
-              <Button onClick={captureBootScreen} disabled={isCapturing} variant="outline" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9] h-auto py-2 sm:py-3 text-xs sm:text-sm">
-                {isCapturing ? <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin" /> : <Camera className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
-                <div className="text-left">
-                  <div className="font-medium">Boot Screen Capture</div>
-                  <div className="text-[8px] sm:text-[10px] text-[#6e7681]">PNG snapshot of the live preview</div>
-                </div>
-              </Button>
-
-              <Button onClick={generateThemeFiles} disabled={isGenerating} variant="outline" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9] h-auto py-2 sm:py-3 text-xs sm:text-sm">
-                {isGenerating ? <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin" /> : <FileCode className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
-                <div className="text-left">
-                  <div className="font-medium">Generate Files</div>
-                  <div className="text-[8px] sm:text-[10px] text-[#6e7681]">theme.txt + ventoy.json</div>
-                </div>
-              </Button>
-
-              <Button onClick={downloadThemePackage} disabled={isDownloading} className="bg-gradient-to-r from-[#a371f7] via-[#58a6ff] to-[#238636] hover:opacity-90 text-white h-auto py-2 sm:py-3 text-xs sm:text-sm">
-                {isDownloading ? <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin" /> : <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
-                <div className="text-left">
-                  <div className="font-medium">Download Package</div>
-                  <div className="text-[8px] sm:text-[10px] text-white/70">Complete ZIP with assets</div>
-                </div>
-              </Button>
-            </div>
-
-            {/* Info Card */}
-            <Card className="bg-[#0d1117] border-[#30363d]">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-start gap-2 sm:gap-3">
-                  <Info className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff] flex-shrink-0 mt-0.5" />
-                  <div className="text-xs sm:text-sm text-[#8b949e]">
-                    <p className="mb-1 sm:mb-2 font-medium text-[#c9d1d9]">Installation Guide:</p>
-                    <ol className="space-y-0.5 sm:space-y-1 text-[10px] sm:text-xs">
-                      <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Extract ZIP file</li>
-                      <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Copy to USB&apos;s <code className="text-[#58a6ff] bg-[#21262d] px-1 rounded">ventoy</code> folder</li>
-                      <li className="flex items-center gap-1"><ChevronRight className="w-3 h-3 text-[#238636]" /> Boot and enjoy your custom theme!</li>
-                    </ol>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
-        </div>
+        </Tabs>
       </main>
     </div>
   );
