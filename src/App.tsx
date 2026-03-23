@@ -4,7 +4,7 @@ import {
   Upload, Download, Image, Palette, Layout, Type, Lock,
   Check, RefreshCw, Info, ChevronRight, Menu, X,
   Sparkles, Save, FolderOpen, Eye, Zap, Shield, Settings2,
-  MonitorPlay, Layers, FileCode
+  MonitorPlay, Layers, FileCode, Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -526,6 +526,7 @@ function App() {
   const [newEntryPath, setNewEntryPath] = useState('');
   const [newEntryAlias, setNewEntryAlias] = useState('');
   const [newEntryIcon, setNewEntryIcon] = useState('auto');
+  const [editingEntryIndex, setEditingEntryIndex] = useState<number | null>(null);
   const [savedConfigs, setSavedConfigs] = useState<SavedConfigRecord[]>([]);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -570,6 +571,14 @@ function App() {
       icon: getResolvedEntryIcon(entry),
     })),
   });
+
+  const resetCustomEntryForm = () => {
+    setNewEntryName('');
+    setNewEntryPath('');
+    setNewEntryAlias('');
+    setNewEntryIcon('auto');
+    setEditingEntryIndex(null);
+  };
 
   // Load saved configs from localStorage on mount
   useEffect(() => {
@@ -692,30 +701,59 @@ function App() {
     }
   };
 
-  const addCustomEntry = () => {
+  const submitCustomEntry = () => {
     if (!newEntryName || !newEntryPath) {
       toast.error('Please enter name and path');
       return;
     }
 
-    const newEntry: CustomEntry = {
+    const nextEntry: CustomEntry = {
       name: newEntryName,
       path: newEntryPath,
       alias: newEntryAlias || newEntryName,
       icon: newEntryIcon === 'auto' ? detectedEntryIcon : newEntryIcon,
     };
 
-    updateConfig('customEntries', [...config.customEntries, newEntry]);
-    setNewEntryName('');
-    setNewEntryPath('');
-    setNewEntryAlias('');
-    setNewEntryIcon('auto');
-    toast.success('Custom entry added!');
+    if (editingEntryIndex === null) {
+      updateConfig('customEntries', [...config.customEntries, nextEntry]);
+      toast.success('Custom entry added!');
+    } else {
+      const nextEntries = config.customEntries.map((entry, index) =>
+        index === editingEntryIndex ? nextEntry : entry
+      );
+      updateConfig('customEntries', nextEntries);
+      toast.success('Custom entry updated!');
+    }
+
+    resetCustomEntryForm();
   };
 
   const removeCustomEntry = (index: number) => {
     const newEntries = config.customEntries.filter((_, i) => i !== index);
     updateConfig('customEntries', newEntries);
+
+    if (editingEntryIndex === index) {
+      resetCustomEntryForm();
+      return;
+    }
+
+    if (editingEntryIndex !== null && index < editingEntryIndex) {
+      setEditingEntryIndex(editingEntryIndex - 1);
+    }
+  };
+
+  const editCustomEntry = (index: number) => {
+    const entry = config.customEntries[index];
+    if (!entry) {
+      return;
+    }
+
+    setNewEntryName(entry.name);
+    setNewEntryPath(entry.path);
+    setNewEntryAlias(entry.alias);
+    setNewEntryIcon(entry.icon || 'auto');
+    setEditingEntryIndex(index);
+    toast.success(`Editing ${entry.alias || entry.name}`);
   };
 
   const updateCustomEntryIcon = (index: number, iconValue: string) => {
@@ -1481,6 +1519,12 @@ function App() {
                       <FileCode className="w-4 h-4" />
                       Custom Menu Entries
                     </Label>
+
+                    {editingEntryIndex !== null && (
+                      <div className="rounded-lg border border-[#58a6ff]/30 bg-[#0d1117] px-3 py-2 text-xs text-[#c9d1d9]">
+                        Editing entry #{editingEntryIndex + 1}. Update the fields below and save your changes.
+                      </div>
+                    )}
                     
                     <div className="grid grid-cols-1 gap-2">
                       <Input value={newEntryName} onChange={(e) => setNewEntryName(e.target.value)} placeholder="ISO Name (e.g. Windows 11)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9] text-sm" />
@@ -1522,9 +1566,16 @@ function App() {
                           ))}
                         </select>
                       </div>
-                      <Button onClick={addCustomEntry} size="sm" className="bg-[#238636] hover:bg-[#2ea043]">
-                        <Check className="w-4 h-4 mr-1" /> Add Entry
-                      </Button>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Button onClick={submitCustomEntry} size="sm" className="bg-[#238636] hover:bg-[#2ea043]">
+                          <Check className="w-4 h-4 mr-1" /> {editingEntryIndex === null ? 'Add Entry' : 'Update Entry'}
+                        </Button>
+                        {editingEntryIndex !== null && (
+                          <Button onClick={resetCustomEntryForm} variant="outline" size="sm" className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]">
+                            <X className="w-4 h-4 mr-1" /> Cancel Edit
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {config.customEntries.length > 0 && (
@@ -1569,6 +1620,9 @@ function App() {
                                   </option>
                                 ))}
                               </select>
+                              <Button variant="ghost" size="sm" onClick={() => editCustomEntry(idx)} className="text-[#58a6ff] hover:text-white hover:bg-[#1f6feb]/20">
+                                <Pencil className="w-4 h-4" />
+                              </Button>
                               <Button variant="ghost" size="sm" onClick={() => removeCustomEntry(idx)} className="text-[#f85149] hover:text-[#ff7b72]">
                                 <X className="w-4 h-4" />
                               </Button>
