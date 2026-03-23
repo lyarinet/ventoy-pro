@@ -4,7 +4,7 @@ import {
   Upload, Download, Image, Palette, Layout, Type, Lock,
   Check, RefreshCw, Info, ChevronRight, Menu, X,
   Sparkles, Save, FolderOpen, Eye, Zap, Shield, Settings2,
-  MonitorPlay, Layers, FileCode, Pencil, Camera
+  MonitorPlay, Layers, FileCode, Pencil, Camera, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -744,6 +744,9 @@ const STORAGE_KEYS = {
   authToken: 'ventoyAuthToken',
 };
 
+const getSavedConfigsStorageKey = (user?: AuthUser | null) =>
+  `${STORAGE_KEYS.savedConfigs}:${user?.id ?? 'guest'}`;
+
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
   ...DEFAULT_CONFIG,
   ...storedConfig,
@@ -1203,6 +1206,30 @@ function App() {
     }
   };
 
+  const readSavedConfigsForUser = (user?: AuthUser | null) => {
+    const scopedKey = getSavedConfigsStorageKey(user);
+    const scopedConfigsStr = localStorage.getItem(scopedKey);
+    const legacyConfigsStr = !user ? localStorage.getItem(STORAGE_KEYS.savedConfigs) : null;
+    const source = scopedConfigsStr ?? legacyConfigsStr;
+    const parsedSavedConfigs = source ? JSON.parse(source) : [];
+
+    const nextSavedConfigs = Array.isArray(parsedSavedConfigs)
+      ? parsedSavedConfigs
+          .filter((item): item is SavedConfigRecord => Boolean(item?.name && item?.config))
+          .map((item) => ({
+            ...item,
+            config: normalizeConfig(item.config),
+            customIconTypes: Array.isArray(item.customIconTypes) ? item.customIconTypes : [],
+          }))
+      : [];
+
+    if (!scopedConfigsStr && legacyConfigsStr && !user) {
+      localStorage.setItem(scopedKey, JSON.stringify(nextSavedConfigs));
+    }
+
+    return nextSavedConfigs;
+  };
+
   const getAuthHeaders = (token?: string) => ({
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1283,22 +1310,19 @@ function App() {
     setEditingEntryIndex(null);
   };
 
-  // Load saved configs from localStorage on mount
   useEffect(() => {
     try {
-      const savedConfigsStr = localStorage.getItem(STORAGE_KEYS.savedConfigs);
-      const parsedSavedConfigs = savedConfigsStr ? JSON.parse(savedConfigsStr) : [];
-      const nextSavedConfigs = Array.isArray(parsedSavedConfigs)
-        ? parsedSavedConfigs
-            .filter((item): item is SavedConfigRecord => Boolean(item?.name && item?.config))
-            .map((item) => ({
-              ...item,
-              config: normalizeConfig(item.config),
-              customIconTypes: Array.isArray(item.customIconTypes) ? item.customIconTypes : [],
-            }))
-        : [];
+      setSavedConfigs(readSavedConfigsForUser(authUser));
+    } catch (error) {
+      console.error('Saved configs load error:', error);
+      setSavedConfigs([]);
+    }
+  }, [authUser?.id]);
 
-      setSavedConfigs(nextSavedConfigs);
+  // Load current draft from localStorage on mount
+  useEffect(() => {
+    try {
+      const nextSavedConfigs = readSavedConfigsForUser();
 
       const currentConfigStr = localStorage.getItem(STORAGE_KEYS.currentConfig);
       const currentCustomIconTypesStr = localStorage.getItem(STORAGE_KEYS.currentCustomIconTypes);
@@ -1614,7 +1638,7 @@ function App() {
       ];
 
       setSavedConfigs(nextSavedConfigs);
-      localStorage.setItem(STORAGE_KEYS.savedConfigs, JSON.stringify(nextSavedConfigs));
+      localStorage.setItem(getSavedConfigsStorageKey(authUser), JSON.stringify(nextSavedConfigs));
       persistDraft(savedConfig.config, customIconTypes);
       persistLastConfig(savedConfig);
 
@@ -1646,6 +1670,26 @@ function App() {
       customIconTypes: saved.customIconTypes ?? [],
     });
     toast.success(`Exported ${saved.name}`);
+  };
+
+  const deleteSavedConfig = (savedName: string) => {
+    try {
+      const nextSavedConfigs = savedConfigs.filter((item) => item.name !== savedName);
+      setSavedConfigs(nextSavedConfigs);
+      localStorage.setItem(getSavedConfigsStorageKey(authUser), JSON.stringify(nextSavedConfigs));
+
+      const lastConfigStr = localStorage.getItem(STORAGE_KEYS.lastConfig);
+      if (lastConfigStr) {
+        const lastConfig = JSON.parse(lastConfigStr) as SavedConfigRecord;
+        if (lastConfig?.name === savedName) {
+          localStorage.removeItem(STORAGE_KEYS.lastConfig);
+        }
+      }
+
+      toast.success(`Deleted ${savedName}`);
+    } catch (error) {
+      toast.error('Could not delete saved config');
+    }
   };
 
   const handleAuthSubmit = async () => {
@@ -2329,6 +2373,13 @@ function App() {
                   title={`Export ${saved.name}`}
                 >
                   <Download className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => deleteSavedConfig(saved.name)}
+                  className="border-l border-[#30363d] px-2 py-1 text-[#8b949e] transition-colors hover:bg-[#3b1013] hover:text-[#ff7b72]"
+                  title={`Delete ${saved.name}`}
+                >
+                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             ))}
