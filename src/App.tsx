@@ -63,6 +63,7 @@ const ICON_TYPES = [
   { id: 'mint', name: 'Mint', color: '#87cf3e' },
   { id: 'manjaro', name: 'Manjaro', color: '#35bf5c' },
   { id: 'popos', name: 'Pop!_OS', color: '#48b9c7' },
+  { id: 'proxmox', name: 'Proxmox', color: '#f59e0b' },
 ];
 
 // Custom icon type definition
@@ -1182,6 +1183,14 @@ const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode
         <path d="M15 7v4h1v2h-3V5h2l-3-4-3 4h2v8H8v-2.07c.7-.24 1.2-.95 1.2-1.79 0-1.03-.85-1.87-1.88-1.87s-1.87.84-1.87 1.87c0 .84.5 1.55 1.2 1.79V14c0 1.1.9 2 2 2h3v3.87c-.7.24-1.2.95-1.2 1.79 0 1.03.85 1.87 1.88 1.87s1.87-.84 1.87-1.87c0-.84-.5-1.55-1.2-1.79V17h3c1.1 0 2-.9 2-2V9h-1V7h-3z"/>
       </svg>
     ),
+    proxmox: (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 5l7 7" />
+        <path d="M5 19l7-7" />
+        <path d="M19 5l-7 7" />
+        <path d="M19 19l-7-7" />
+      </svg>
+    ),
   };
 
   return (logos[type] || logos.usb) as ReactNode;
@@ -1253,6 +1262,30 @@ function App() {
     (marketplacePage - 1) * MARKETPLACE_PAGE_SIZE,
     marketplacePage * MARKETPLACE_PAGE_SIZE
   );
+  const isUploadedIcon = (iconId?: string) => Boolean(iconId && iconPreviews[iconId]);
+  const isCustomIconType = (iconId?: string) => Boolean(iconId && customIconTypes.some((icon) => icon.id === iconId));
+  const getIconStatusLabel = (iconId?: string) => {
+    if (!iconId) {
+      return 'Default';
+    }
+    if (isUploadedIcon(iconId)) {
+      return 'Uploaded';
+    }
+    if (isCustomIconType(iconId)) {
+      return 'Auto Fallback';
+    }
+    return 'Default';
+  };
+  const getIconStatusClasses = (iconId?: string) => {
+    const status = getIconStatusLabel(iconId);
+    if (status === 'Uploaded') {
+      return 'border-[#238636]/40 bg-[#238636]/10 text-[#3fb950]';
+    }
+    if (status === 'Auto Fallback') {
+      return 'border-[#58a6ff]/40 bg-[#58a6ff]/10 text-[#79c0ff]';
+    }
+    return 'border-[#30363d] bg-[#161b22] text-[#8b949e]';
+  };
 
   const persistDraft = (nextConfig: ThemeConfig, nextCustomIconTypes: CustomIconType[]) => {
     try {
@@ -1642,12 +1675,24 @@ function App() {
       toast.error('Please enter icon ID and name');
       return;
     }
-    if (ICON_TYPES.find(t => t.id === newCustomIconId) || customIconTypes.find(t => t.id === newCustomIconId)) {
+
+    const normalizedIconId = newCustomIconId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (!normalizedIconId) {
+      toast.error('Use letters or numbers for the icon ID');
+      return;
+    }
+
+    if (ICON_TYPES.find(t => t.id === normalizedIconId) || customIconTypes.find(t => t.id === normalizedIconId)) {
       toast.error('Icon ID already exists');
       return;
     }
     const newIconType: CustomIconType = {
-      id: newCustomIconId,
+      id: normalizedIconId,
       name: newCustomIconName,
       color: newCustomIconColor,
       isCustom: true,
@@ -1656,7 +1701,7 @@ function App() {
     setNewCustomIconId('');
     setNewCustomIconName('');
     setNewCustomIconColor('#ff00ff');
-    toast.success('Custom icon type added!');
+    toast.success(`Custom icon type "${normalizedIconId}" added!`);
   };
 
   const removeCustomIconType = (iconId: string) => {
@@ -3132,6 +3177,9 @@ function App() {
                       {ICON_TYPES.map((icon) => (
                         <div key={icon.id} onClick={() => iconInputRefs.current[icon.id]?.click()} className="relative group cursor-pointer">
                           <div className="aspect-square rounded-lg border-2 border-[#30363d] bg-[#0d1117] flex flex-col items-center justify-center gap-1 hover:border-[#58a6ff] hover:shadow-lg hover:shadow-blue-500/20 transition-all group-hover:scale-105" style={{ borderColor: iconPreviews[icon.id] ? icon.color : undefined }}>
+                            <div className={`absolute left-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.16em] ${getIconStatusClasses(icon.id)}`}>
+                              {getIconStatusLabel(icon.id)}
+                            </div>
                             {iconPreviews[icon.id] ? (
                               <img src={iconPreviews[icon.id]} alt={icon.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                             ) : (
@@ -3155,7 +3203,10 @@ function App() {
                     <div className="space-y-2">
                       <h4 className="text-xs font-medium text-[#58a6ff]">Custom Icons</h4>
                       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 sm:gap-3">
-                        {customIconTypes.map((icon) => (
+                        {customIconTypes.map((icon) => {
+                          const hasUploadedIcon = Boolean(iconPreviews[icon.id]);
+
+                          return (
                           <div key={icon.id} className="relative group">
                             <div className="aspect-square rounded-lg border-2 border-[#30363d] bg-[#0d1117] flex flex-col items-center justify-center gap-1 hover:border-[#f85149] transition-all">
                               <button
@@ -3165,8 +3216,17 @@ function App() {
                               >
                                 <X className="w-3 h-3 text-white" />
                               </button>
+                              <div
+                                className={`absolute left-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.16em] ${
+                                  hasUploadedIcon
+                                    ? 'border-[#238636]/40 bg-[#238636]/10 text-[#3fb950]'
+                                    : 'border-[#58a6ff]/40 bg-[#58a6ff]/10 text-[#79c0ff]'
+                                }`}
+                              >
+                                {hasUploadedIcon ? 'Upload Ready' : 'Auto Fallback'}
+                              </div>
                               <div onClick={() => iconInputRefs.current[icon.id]?.click()} className="cursor-pointer w-full flex flex-col items-center">
-                                {iconPreviews[icon.id] ? (
+                                {hasUploadedIcon ? (
                                   <img src={iconPreviews[icon.id]} alt={icon.name} className="w-6 h-6 sm:w-8 sm:h-8 object-contain" />
                                 ) : (
                                   <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: icon.color }}>
@@ -3175,7 +3235,7 @@ function App() {
                                 )}
                               </div>
                               <span className="text-[8px] sm:text-[10px] text-[#8b949e]">{icon.name}</span>
-                              {iconPreviews[icon.id] && (
+                              {hasUploadedIcon && (
                                 <div className="absolute top-0.5 right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-[#238636] rounded-full flex items-center justify-center">
                                   <Check className="w-2 h-2 sm:w-3 sm:h-3 text-white" />
                                 </div>
@@ -3183,7 +3243,7 @@ function App() {
                             </div>
                             <input ref={(el) => { iconInputRefs.current[icon.id] = el; }} type="file" accept="image/*" onChange={(e) => handleIconUpload(icon.id, e)} className="hidden" />
                           </div>
-                        ))}
+                        )})}
                       </div>
                     </div>
                   )}
@@ -3199,7 +3259,7 @@ function App() {
                               <Info className="w-3 h-3 text-[#8b949e] hover:text-[#58a6ff] cursor-help" />
                             </TooltipTrigger>
                             <TooltipContent side="right" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9] max-w-xs">
-                              <p className="text-xs">Create custom icon types for your specific ISO files. The ID will be used to match ISO filenames.</p>
+                              <p className="text-xs">Create any custom icon type for your ISO files. Upload an icon if you want, otherwise the download package will include an auto-generated fallback icon for that custom type.</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -3568,18 +3628,28 @@ function App() {
                             <p className="text-[#6e7681]">You can keep auto or choose an icon manually.</p>
                           </div>
                         </div>
-                        <select
-                          value={newEntryIcon}
-                          onChange={(e) => setNewEntryIcon(e.target.value)}
-                          className="w-full rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#c9d1d9]"
-                        >
-                          <option value="auto">Auto Detect</option>
-                          {availableIconTypes.map((icon) => (
-                            <option key={icon.id} value={icon.id}>
-                              {icon.name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="space-y-2">
+                          <select
+                            value={newEntryIcon}
+                            onChange={(e) => setNewEntryIcon(e.target.value)}
+                            className="w-full rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#c9d1d9]"
+                          >
+                            <option value="auto">Auto Detect</option>
+                            {availableIconTypes.map((icon) => (
+                              <option key={icon.id} value={icon.id}>
+                                {icon.name}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="flex items-center justify-between rounded-md border border-[#30363d] bg-[#11161d] px-3 py-2 text-[11px]">
+                            <span className="text-[#8b949e]">
+                              {newEntryIcon === 'auto' ? 'Using auto detected icon' : 'Selected icon package status'}
+                            </span>
+                            <span className={`rounded-full border px-2 py-0.5 font-semibold uppercase tracking-[0.16em] ${getIconStatusClasses(newEntryIcon === 'auto' ? detectedEntryIcon : newEntryIcon)}`}>
+                              {getIconStatusLabel(newEntryIcon === 'auto' ? detectedEntryIcon : newEntryIcon)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <Button onClick={submitCustomEntry} size="sm" className="bg-[#238636] hover:bg-[#2ea043]">

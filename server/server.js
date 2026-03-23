@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import {
   DB_PATH,
@@ -78,9 +79,11 @@ const brandingDir = path.join(uploadsDir, 'branding');
 const outputDir = path.join(__dirname, 'output');
 const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
 const themeAssetsDir = path.join(__dirname, 'theme-assets');
+const builtInIconsDir = path.join(__dirname, 'builtin-icons');
+const generatedIconsDir = path.join(__dirname, 'generated-icons');
 const dataDir = path.join(__dirname, 'data');
 
-[uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir].forEach(dir => {
+[uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir, generatedIconsDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -566,11 +569,19 @@ app.post('/api/download/theme', async (req, res) => {
     }
 
     // Add icons
-    Object.entries(config.iconFiles || {}).forEach(([iconType, filename]) => {
-      if (filename && fs.existsSync(path.join(iconsDir, filename))) {
-        const ext = path.extname(filename);
-        archive.file(path.join(iconsDir, filename), { name: `${themeRoot}/icons/${iconType}${ext}` });
+    const iconTypesToPackage = new Set([
+      ...Object.keys(config.iconFiles || {}),
+      ...(Array.isArray(config.customIconTypes) ? config.customIconTypes.map((icon) => icon?.id).filter(Boolean) : []),
+      ...(Array.isArray(config.customEntries) ? config.customEntries.map((entry) => entry?.icon).filter(Boolean) : []),
+    ]);
+
+    iconTypesToPackage.forEach((iconType) => {
+      const source = getIconAssetSource(iconType, config.iconFiles?.[iconType], config.customIconTypes || []);
+      if (!source) {
+        return;
       }
+
+      archive.file(source.sourcePath, { name: `${themeRoot}/icons/${iconType}${source.ext}` });
     });
 
     await archive.finalize();
@@ -609,6 +620,7 @@ function generateThemeTxt(config) {
     menuTop = 30,
     menuWidth = 50,
     menuHeight = 45,
+    menuStyle = 'modern-glass',
     itemFontSize = 16,
     progressBgColor = '#21262d',
     progressFgColor = '#238636',
@@ -618,8 +630,24 @@ function generateThemeTxt(config) {
     selectedItemBoxEffect = true,
   } = config;
   const safeFont = 'ascii';
-  const safeItemFontSize = Math.min(Math.max(itemFontSize, 12), 32);
-  const safeItemHeight = Math.max(42, safeItemFontSize + 16);
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+  const calibratedItemFontSize = clamp(itemFontSize - 1, 12, 28);
+  const safeItemFontSize = calibratedItemFontSize;
+  const safeItemHeight = Math.max(40, safeItemFontSize + 14);
+  const horizontalTrim = menuFrameEffect ? (menuStyle === 'centered-arcade' ? 10 : 8) : 4;
+  const verticalTrim = menuFrameEffect ? 8 : 4;
+  const calibratedMenuWidth = clamp(menuWidth - horizontalTrim, 28, 72);
+  const calibratedMenuHeight = clamp(menuHeight - verticalTrim, 20, 56);
+  const calibratedMenuLeft = clamp(
+    menuLeft + ((menuWidth - calibratedMenuWidth) / 2),
+    4,
+    96 - calibratedMenuWidth
+  );
+  const calibratedMenuTop = clamp(
+    menuTop + ((menuHeight - calibratedMenuHeight) / 2) + (menuStyle === 'centered-arcade' ? 1 : 0),
+    8,
+    92 - calibratedMenuHeight
+  );
 
   return `# ============================================
 # Lyaritech Ventoy Pro Theme Configuration for Ventoy
@@ -646,10 +674,10 @@ menu-tip-color: "${footerColor}"
 # Boot Menu Configuration
 # ============================================
 + boot_menu {
-    left = ${menuLeft}%
-    top = ${menuTop}%
-    width = ${menuWidth}%
-    height = ${menuHeight}%
+    left = ${calibratedMenuLeft}%
+    top = ${calibratedMenuTop}%
+    width = ${calibratedMenuWidth}%
+    height = ${calibratedMenuHeight}%
     
     # Font settings
     item_font = "${safeFont}"
@@ -662,14 +690,14 @@ menu-tip-color: "${footerColor}"
     selected_item_color = "${selectedTextColor}"
     
     # Icon settings
-    icon_width = 24
-    icon_height = 24
-    item_icon_space = 10
+    icon_width = 28
+    icon_height = 28
+    item_icon_space = 14
     
     # Item spacing
     item_height = ${safeItemHeight}
-    item_padding = 10
-    item_spacing = 8
+    item_padding = 16
+    item_spacing = 6
     ${menuFrameEffect ? 'menu_pixmap_style = "menu_*.png"' : '# menu frame box disabled'}
     ${selectedItemBoxEffect ? 'selected_item_pixmap_style = "selected_item_*.png"' : '# selected item box disabled'}
 
@@ -796,6 +824,188 @@ function toVentoySafeAscii(value, fallback = '') {
   return normalized || fallback;
 }
 
+function crc32(buffer) {
+  let crc = 0xffffffff;
+
+  for (let i = 0; i < buffer.length; i += 1) {
+    crc ^= buffer[i];
+    for (let j = 0; j < 8; j += 1) {
+      const mask = -(crc & 1);
+      crc = (crc >>> 1) ^ (0xedb88320 & mask);
+    }
+  }
+
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function createPngChunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+
+  const typeBuffer = Buffer.from(type);
+  const crcBuffer = Buffer.alloc(4);
+  const chunkCrc = crc32(Buffer.concat([typeBuffer, data]));
+  crcBuffer.writeUInt32BE(chunkCrc >>> 0, 0);
+
+  return Buffer.concat([length, typeBuffer, data, crcBuffer]);
+}
+
+function encodeSimplePng(width, height, rgbaBuffer) {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  ihdr[10] = 0;
+  ihdr[11] = 0;
+  ihdr[12] = 0;
+
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    raw[y * (stride + 1)] = 0;
+    rgbaBuffer.copy(raw, y * (stride + 1) + 1, y * stride, y * stride + stride);
+  }
+
+  const compressed = zlib.deflateSync(raw, { level: 9 });
+
+  return Buffer.concat([
+    signature,
+    createPngChunk('IHDR', ihdr),
+    createPngChunk('IDAT', compressed),
+    createPngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+function hexToRgb(hex, fallback = { r: 88, g: 166, b: 255 }) {
+  const normalized = String(hex || '').trim().replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) {
+    return fallback;
+  }
+
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function clampColor(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function tintColor(rgb, amount) {
+  return {
+    r: clampColor(rgb.r + amount),
+    g: clampColor(rgb.g + amount),
+    b: clampColor(rgb.b + amount),
+  };
+}
+
+function makeGeneratedIconBuffer(iconType) {
+  const width = 64;
+  const height = 64;
+  const buffer = Buffer.alloc(width * height * 4, 0);
+  const base = hexToRgb(iconType?.color);
+  const border = tintColor(base, 45);
+  const inner = tintColor(base, -24);
+  const glyph = tintColor(base, 72);
+  const slug = String(iconType?.id || iconType?.name || 'custom').toLowerCase();
+  const hash = [...slug].reduce((acc, char) => acc + char.charCodeAt(0), 0);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const dx = Math.min(x, width - 1 - x);
+      const dy = Math.min(y, height - 1 - y);
+      const corner = 11;
+      let alpha = 0;
+      let fill = null;
+
+      const inBody = x >= 6 && x <= 57 && y >= 6 && y <= 57;
+      if (inBody) {
+        const nearCorner =
+          (x < 6 + corner && y < 6 + corner && ((x - (6 + corner)) ** 2 + (y - (6 + corner)) ** 2 > corner ** 2)) ||
+          (x > 57 - corner && y < 6 + corner && ((x - (57 - corner)) ** 2 + (y - (6 + corner)) ** 2 > corner ** 2)) ||
+          (x < 6 + corner && y > 57 - corner && ((x - (6 + corner)) ** 2 + (y - (57 - corner)) ** 2 > corner ** 2)) ||
+          (x > 57 - corner && y > 57 - corner && ((x - (57 - corner)) ** 2 + (y - (57 - corner)) ** 2 > corner ** 2));
+
+        if (!nearCorner) {
+          alpha = 255;
+          fill = dx <= 7 || dy <= 7 ? border : inner;
+        }
+      }
+
+      const stripeA = Math.abs(y - x - ((hash % 10) - 5)) <= 2;
+      const stripeB = Math.abs((width - 1 - x) - y + ((hash % 8) - 4)) <= 2;
+      const dot = ((x - 32) ** 2 + (y - 32) ** 2) <= 36;
+
+      if (fill && (stripeA || stripeB || dot) && x > 15 && x < 49 && y > 15 && y < 49) {
+        fill = glyph;
+      }
+
+      if (fill) {
+        const idx = (y * width + x) * 4;
+        buffer[idx] = fill.r;
+        buffer[idx + 1] = fill.g;
+        buffer[idx + 2] = fill.b;
+        buffer[idx + 3] = alpha;
+      }
+    }
+  }
+
+  return encodeSimplePng(width, height, buffer);
+}
+
+function getGeneratedCustomIconPath(iconType) {
+  if (!iconType?.id) {
+    return null;
+  }
+
+  const colorKey = String(iconType.color || '58a6ff').replace(/[^0-9a-f]/gi, '').slice(0, 6) || '58a6ff';
+  const filePath = path.join(generatedIconsDir, `${iconType.id}-${colorKey}.png`);
+
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, makeGeneratedIconBuffer(iconType));
+  }
+
+  return filePath;
+}
+
+function getIconAssetSource(iconType, filename, customIconTypes = []) {
+  if (filename && fs.existsSync(path.join(iconsDir, filename))) {
+    return {
+      sourcePath: path.join(iconsDir, filename),
+      ext: path.extname(filename) || '.png',
+    };
+  }
+
+  const builtInCandidates = [
+    path.join(builtInIconsDir, `${iconType}.png`),
+    path.join(builtInIconsDir, `${iconType}.jpg`),
+    path.join(builtInIconsDir, `${iconType}.jpeg`),
+  ];
+
+  const builtInMatch = builtInCandidates.find((candidate) => fs.existsSync(candidate));
+  if (builtInMatch) {
+    return {
+      sourcePath: builtInMatch,
+      ext: path.extname(builtInMatch) || '.png',
+    };
+  }
+
+  const customIconType = customIconTypes.find((entry) => entry?.id === iconType);
+  const generatedPath = getGeneratedCustomIconPath(customIconType);
+  if (generatedPath) {
+    return {
+      sourcePath: generatedPath,
+      ext: '.png',
+    };
+  }
+
+  return null;
+}
+
 function generateVentoyJson(config) {
   const {
     resolution = '1920x1080',
@@ -812,25 +1022,26 @@ function generateVentoyJson(config) {
 
   // Map icon types to file extensions
   const iconMappings = {
-    windows: { keys: ['windows', 'win', 'win10', 'win11'], file: iconFiles.windows },
-    linux: { keys: ['linux'], file: iconFiles.linux },
-    ubuntu: { keys: ['ubuntu'], file: iconFiles.ubuntu },
-    debian: { keys: ['debian'], file: iconFiles.debian },
-    fedora: { keys: ['fedora'], file: iconFiles.fedora },
-    kali: { keys: ['kali'], file: iconFiles.kali },
-    macos: { keys: ['macos', 'osx', 'mac'], file: iconFiles.macos },
-    arch: { keys: ['arch'], file: iconFiles.arch },
-    mint: { keys: ['mint'], file: iconFiles.mint },
-    manjaro: { keys: ['manjaro'], file: iconFiles.manjaro },
-    popos: { keys: ['pop', 'popos'], file: iconFiles.popos },
-    usb: { keys: ['iso'], file: iconFiles.usb }
+    windows: { keys: ['windows', 'win', 'win10', 'win11'], file: iconFiles.windows || null },
+    linux: { keys: ['linux'], file: iconFiles.linux || null },
+    ubuntu: { keys: ['ubuntu'], file: iconFiles.ubuntu || null },
+    debian: { keys: ['debian'], file: iconFiles.debian || null },
+    fedora: { keys: ['fedora'], file: iconFiles.fedora || null },
+    kali: { keys: ['kali'], file: iconFiles.kali || null },
+    macos: { keys: ['macos', 'osx', 'mac'], file: iconFiles.macos || null },
+    arch: { keys: ['arch'], file: iconFiles.arch || null },
+    mint: { keys: ['mint'], file: iconFiles.mint || null },
+    manjaro: { keys: ['manjaro'], file: iconFiles.manjaro || null },
+    popos: { keys: ['pop', 'popos'], file: iconFiles.popos || null },
+    proxmox: { keys: ['proxmox', 'pve'], file: iconFiles.proxmox || null },
+    usb: { keys: ['iso'], file: iconFiles.usb || null }
   };
 
   customIconTypes.forEach((iconType) => {
-    if (iconType?.id && iconFiles[iconType.id]) {
+    if (iconType?.id && getIconAssetSource(iconType.id, iconFiles[iconType.id], customIconTypes)) {
       iconMappings[iconType.id] = {
         keys: [iconType.id.toLowerCase()],
-        file: iconFiles[iconType.id],
+        file: iconFiles[iconType.id] || `${iconType.id}.png`,
       };
     }
   });
@@ -844,7 +1055,7 @@ function generateVentoyJson(config) {
   });
 
   customEntries.forEach((entry) => {
-    if (!entry?.icon || !iconFiles[entry.icon]) {
+    if (!entry?.icon || !getIconAssetSource(entry.icon, iconFiles[entry.icon], customIconTypes)) {
       return;
     }
 
