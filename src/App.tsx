@@ -353,6 +353,34 @@ const BUILT_IN_BACKGROUNDS: BuiltInBackground[] = [
 
 const MARKETPLACE_PAGE_SIZE = 6;
 
+const WIZARD_STEPS = [
+  {
+    value: 'background',
+    title: 'Background',
+    subtitle: 'Pick a preset wallpaper or upload your own custom background.',
+  },
+  {
+    value: 'colors',
+    title: 'Colors',
+    subtitle: 'Tune the accents, selected text, and progress colors for your theme.',
+  },
+  {
+    value: 'fonts',
+    title: 'Fonts',
+    subtitle: 'Choose readable fonts and sizes that fit your Ventoy menu.',
+  },
+  {
+    value: 'layout',
+    title: 'Layout',
+    subtitle: 'Place the menu, set the resolution, and adjust timeout.',
+  },
+  {
+    value: 'download',
+    title: 'Download',
+    subtitle: 'Generate the files or download the complete package in one go.',
+  },
+] as const;
+
 const TAB_ITEMS: Array<{
   value: string;
   label: string;
@@ -796,6 +824,8 @@ function App() {
   const [config, setConfig] = useState<ThemeConfig>(DEFAULT_CONFIG);
   const [iconPreviews, setIconPreviews] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('templates');
+  const [wizardMode, setWizardMode] = useState(false);
+  const [wizardStep, setWizardStep] = useState<(typeof WIZARD_STEPS)[number]['value']>('background');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -825,6 +855,8 @@ function App() {
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
   const backgroundPreview = buildBackgroundPreviewUrl(config.backgroundSource, config.backgroundFile);
   const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
+  const currentWizardIndex = WIZARD_STEPS.findIndex((step) => step.value === wizardStep);
+  const currentWizardStep = WIZARD_STEPS[currentWizardIndex] ?? WIZARD_STEPS[0];
   const visibleMarketplaceThemes = marketplaceThemes.slice(
     (marketplacePage - 1) * MARKETPLACE_PAGE_SIZE,
     marketplacePage * MARKETPLACE_PAGE_SIZE
@@ -937,8 +969,28 @@ function App() {
     }
   }, [marketplacePage, totalMarketplacePages]);
 
+  useEffect(() => {
+    if (wizardMode && activeTab !== wizardStep) {
+      setActiveTab(wizardStep);
+    }
+  }, [activeTab, wizardMode, wizardStep]);
+
   const updateConfig = <K extends keyof ThemeConfig>(key: K, value: ThemeConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const goToWizardStep = (step: (typeof WIZARD_STEPS)[number]['value']) => {
+    setWizardStep(step);
+    setActiveTab(step);
+  };
+
+  const moveWizardStep = (direction: 'next' | 'prev') => {
+    const nextIndex = direction === 'next' ? currentWizardIndex + 1 : currentWizardIndex - 1;
+    const nextStep = WIZARD_STEPS[nextIndex];
+    if (!nextStep) {
+      return;
+    }
+    goToWizardStep(nextStep.value);
   };
 
   const applyAdvancedPreset = (preset: typeof ADVANCED_PRESETS[0]) => {
@@ -1519,6 +1571,75 @@ function App() {
             </CardHeader>
             <CardContent className="px-3 sm:px-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <div className="mb-5 rounded-[28px] border border-[#30363d] bg-[#0d1117] p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Theme Wizard</p>
+                      <p className="text-sm font-medium text-[#e6edf3]">Beginner-friendly guided setup for your Ventoy theme.</p>
+                      <p className="text-xs text-[#8b949e]">
+                        Follow 5 simple steps: Background, Colors, Fonts, Layout, then Download.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#30363d] bg-[#161b22] px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-[#c9d1d9]">Wizard Mode</p>
+                        <p className="text-[11px] text-[#8b949e]">Show one guided step at a time</p>
+                      </div>
+                      <Switch
+                        checked={wizardMode}
+                        onCheckedChange={(checked) => {
+                          setWizardMode(checked);
+                          if (checked) {
+                            goToWizardStep(wizardStep);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {wizardMode && (
+                    <div className="mt-4 space-y-4">
+                      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+                        {WIZARD_STEPS.map((step, index) => {
+                          const isActive = step.value === wizardStep;
+                          const isComplete = index < currentWizardIndex;
+
+                          return (
+                            <button
+                              key={step.value}
+                              type="button"
+                              onClick={() => goToWizardStep(step.value)}
+                              className={`rounded-2xl border px-3 py-3 text-left transition-all ${
+                                isActive
+                                  ? 'border-[#58a6ff] bg-[#161b22] shadow-lg shadow-blue-500/10'
+                                  : isComplete
+                                    ? 'border-[#238636]/40 bg-[#0d1117]'
+                                    : 'border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]'
+                              }`}
+                            >
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8b949e]">
+                                  Step {index + 1}
+                                </span>
+                                {isComplete ? (
+                                  <Check className="h-4 w-4 text-[#238636]" />
+                                ) : null}
+                              </div>
+                              <p className="text-sm font-semibold text-[#e6edf3]">{step.title}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="rounded-2xl border border-[#30363d] bg-[#161b22]/70 px-4 py-3">
+                        <p className="text-sm font-semibold text-[#e6edf3]">{currentWizardStep.title}</p>
+                        <p className="text-xs text-[#8b949e]">{currentWizardStep.subtitle}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {!wizardMode && (
                 <div className="control-tabs-shell mb-5 overflow-hidden rounded-[28px] border border-[#30363d]">
                   <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
                     <div>
@@ -1594,6 +1715,7 @@ function App() {
                     </TabsList>
                   </TooltipProvider>
                 </div>
+                )}
 
                 {/* Templates Tab */}
                 <TabsContent value="templates" className="space-y-4 mt-0">
@@ -2180,6 +2302,45 @@ function App() {
                   </div>
                 </TabsContent>
 
+                <TabsContent value="download" className="space-y-4 mt-0">
+                  <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] p-4">
+                    <div className="space-y-2">
+                      <Label className="text-[#58a6ff] text-sm">Final Step: Download Your Theme</Label>
+                      <p className="text-xs text-[#8b949e]">
+                        Your theme is ready. Generate the raw config files or download the full ZIP package with assets.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <Button onClick={generateThemeFiles} disabled={isGenerating} variant="outline" className="h-auto justify-start border-[#30363d] bg-[#161b22] py-4 text-left text-[#c9d1d9] hover:bg-[#21262d]">
+                      {isGenerating ? <RefreshCw className="mr-3 h-4 w-4 animate-spin" /> : <FileCode className="mr-3 h-4 w-4" />}
+                      <div>
+                        <div className="font-medium">Generate Files</div>
+                        <div className="text-[11px] text-[#8b949e]">Download `theme.txt` and `ventoy.json` separately</div>
+                      </div>
+                    </Button>
+
+                    <Button onClick={downloadThemePackage} disabled={isDownloading} className="h-auto justify-start bg-gradient-to-r from-[#a371f7] via-[#58a6ff] to-[#238636] py-4 text-left text-white hover:opacity-90">
+                      {isDownloading ? <RefreshCw className="mr-3 h-4 w-4 animate-spin" /> : <Download className="mr-3 h-4 w-4" />}
+                      <div>
+                        <div className="font-medium">Download Package</div>
+                        <div className="text-[11px] text-white/75">Complete ZIP with your assets, icons, and theme files</div>
+                      </div>
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#30363d] bg-[#161b22] p-4">
+                    <p className="text-sm font-medium text-[#e6edf3]">Quick checklist</p>
+                    <ul className="mt-2 space-y-2 text-xs text-[#8b949e]">
+                      <li>Background: {config.backgroundFile ? 'selected' : 'color only'}</li>
+                      <li>Header: {config.headerText || 'Ventoy Boot Menu'}</li>
+                      <li>Fonts: {config.titleFont} / {config.itemFont}</li>
+                      <li>Layout: {config.menuWidth}% width at {config.menuLeft}%, {config.menuTop}%</li>
+                    </ul>
+                  </div>
+                </TabsContent>
+
                 {/* Advanced Tab */}
                 <TabsContent value="advanced" className="space-y-4 mt-0">
                   {/* Password Protection */}
@@ -2320,6 +2481,40 @@ function App() {
                     )}
                   </div>
                 </TabsContent>
+
+                {wizardMode && (
+                  <div className="mt-5 rounded-2xl border border-[#30363d] bg-[#0d1117] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-[#e6edf3]">
+                          Step {currentWizardIndex + 1} of {WIZARD_STEPS.length}: {currentWizardStep.title}
+                        </p>
+                        <p className="text-xs text-[#8b949e]">{currentWizardStep.subtitle}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => moveWizardStep('prev')}
+                          disabled={currentWizardIndex === 0}
+                          className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]"
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => moveWizardStep('next')}
+                          disabled={currentWizardIndex === WIZARD_STEPS.length - 1}
+                          className="bg-gradient-to-r from-[#1f6feb] to-[#58a6ff] text-white hover:opacity-90"
+                        >
+                          {currentWizardIndex === WIZARD_STEPS.length - 2 ? 'Go To Download' : 'Next Step'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </Tabs>
             </CardContent>
           </Card>
