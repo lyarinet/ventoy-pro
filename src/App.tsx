@@ -370,9 +370,19 @@ const WIZARD_STEPS = [
     subtitle: 'Choose readable fonts and sizes that fit your Ventoy menu.',
   },
   {
+    value: 'icons',
+    title: 'Icons',
+    subtitle: 'Turn icons on, replace built-in logos, or upload custom icon packs.',
+  },
+  {
     value: 'layout',
     title: 'Layout',
     subtitle: 'Place the menu, set the resolution, and adjust timeout.',
+  },
+  {
+    value: 'advanced',
+    title: 'Advanced',
+    subtitle: 'Add custom menu entries, passwords, and extra boot controls if needed.',
   },
   {
     value: 'download',
@@ -1577,7 +1587,7 @@ function App() {
                       <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Theme Wizard</p>
                       <p className="text-sm font-medium text-[#e6edf3]">Beginner-friendly guided setup for your Ventoy theme.</p>
                       <p className="text-xs text-[#8b949e]">
-                        Follow 5 simple steps: Background, Colors, Fonts, Layout, then Download.
+                        Follow the guided steps: Background, Colors, Fonts, Icons, Layout, Advanced, then Download.
                       </p>
                     </div>
                     <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#30363d] bg-[#161b22] px-4 py-3">
@@ -1599,7 +1609,7 @@ function App() {
 
                   {wizardMode && (
                     <div className="mt-4 space-y-4">
-                      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+                      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                         {WIZARD_STEPS.map((step, index) => {
                           const isActive = step.value === wizardStep;
                           const isComplete = index < currentWizardIndex;
