@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">
+  <defs>
+    <radialGradient id="spot" cx="50%" cy="50%" r="42%">
+      <stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+      <path d="M 80 0 L 0 0 0 80" fill="none" stroke="#0ea5e9" stroke-opacity="0.35" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#050b14"/>
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+  <rect x="150" y="150" width="1620" height="780" fill="#0b1322" opacity="0.84"/>
+  <ellipse cx="960" cy="540" rx="500" ry="300" fill="url(#spot)"/>
+
+  <g stroke="#22d3ee" stroke-width="4" fill="none">
+    <path d="M 50 50 H 180" />
+    <path d="M 50 50 V 180" />
+    <path d="M 1870 50 H 1740" />
+    <path d="M 1870 50 V 180" />
+    <path d="M 50 1030 H 180" />
+    <path d="M 50 1030 V 900" />
+    <path d="M 1870 1030 H 1740" />
+    <path d="M 1870 1030 V 900" />
+  </g>
+</svg>

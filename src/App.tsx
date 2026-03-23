@@ -82,6 +82,14 @@ interface CommunityTheme {
   config: Partial<ThemeConfig>;
 }
 
+interface BuiltInBackground {
+  id: string;
+  name: string;
+  summary: string;
+  filename: string;
+  accent: string;
+}
+
 // Font options
 const FONT_OPTIONS = [
   { value: 'Unifont Regular', label: 'Unifont (Default)' },
@@ -312,6 +320,39 @@ const COMMUNITY_THEMES: CommunityTheme[] = [
   },
 ];
 
+const BUILT_IN_BACKGROUNDS: BuiltInBackground[] = [
+  {
+    id: 'neon-waves',
+    name: 'Neon Waves',
+    summary: 'Electric cyan ribbons with a deep violet stage.',
+    filename: 'neon-waves.svg',
+    accent: '#38bdf8',
+  },
+  {
+    id: 'cyan-grid',
+    name: 'Cyan Grid',
+    summary: 'Clean targeting frame with a centered glow.',
+    filename: 'cyan-grid.svg',
+    accent: '#22d3ee',
+  },
+  {
+    id: 'star-grid',
+    name: 'Star Grid',
+    summary: 'Boot-ready starfield layered over a blueprint grid.',
+    filename: 'star-grid.svg',
+    accent: '#60a5fa',
+  },
+  {
+    id: 'tech-frame',
+    name: 'Tech Frame',
+    summary: 'Polished metallic panel with neon edge lighting.',
+    filename: 'tech-frame.svg',
+    accent: '#a78bfa',
+  },
+];
+
+const MARKETPLACE_PAGE_SIZE = 6;
+
 const TAB_ITEMS: Array<{
   value: string;
   label: string;
@@ -331,11 +372,20 @@ const TAB_ITEMS: Array<{
     accent: 'from-[#c084fc] via-[#8b5cf6] to-[#38bdf8]',
   },
   {
+    value: 'marketplace',
+    label: 'Share Themes',
+    shortLabel: 'Share',
+    hint: 'Open marketplace and shared PNG cards',
+    tooltip: 'Community showcase for sharing and downloading themes',
+    icon: FolderOpen,
+    accent: 'from-[#60a5fa] via-[#3b82f6] to-[#22c55e]',
+  },
+  {
     value: 'background',
     label: 'Background',
     shortLabel: 'BG',
-    hint: 'Upload wallpapers and base color',
-    tooltip: 'Upload and configure background image',
+    hint: 'Pick presets, upload wallpapers and base color',
+    tooltip: 'Choose built-in or uploaded background images',
     icon: Image,
     accent: 'from-[#22c55e] via-[#14b8a6] to-[#38bdf8]',
   },
@@ -445,6 +495,7 @@ type ThemeConfig = {
   customEntries: CustomEntry[];
   
   // Files
+  backgroundSource: 'upload' | 'builtin';
   backgroundFile?: string;
   iconFiles?: Record<string, string>;
 };
@@ -491,6 +542,7 @@ const DEFAULT_CONFIG: ThemeConfig = {
   
   customEntries: [],
   
+  backgroundSource: 'upload',
   backgroundFile: undefined,
   iconFiles: {},
 };
@@ -506,6 +558,7 @@ const STORAGE_KEYS = {
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
   ...DEFAULT_CONFIG,
   ...storedConfig,
+  backgroundSource: storedConfig?.backgroundSource === 'builtin' ? 'builtin' : 'upload',
   customEntries: Array.isArray(storedConfig?.customEntries)
     ? storedConfig.customEntries.map((entry) => ({
         name: entry?.name ?? '',
@@ -517,8 +570,18 @@ const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfi
   iconFiles: storedConfig?.iconFiles ?? {},
 });
 
-const buildBackgroundPreviewUrl = (filename?: string) =>
-  filename ? `${API_URL}/uploads/backgrounds/${filename}` : null;
+const buildBackgroundPreviewUrl = (
+  source: ThemeConfig['backgroundSource'],
+  filename?: string
+) => {
+  if (!filename) {
+    return null;
+  }
+
+  return source === 'builtin'
+    ? `/backgrounds/${filename}`
+    : `${API_URL}/uploads/backgrounds/${filename}`;
+};
 
 const buildIconPreviewUrls = (iconFiles?: Record<string, string>) =>
   Object.fromEntries(
@@ -731,7 +794,6 @@ const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode
 
 function App() {
   const [config, setConfig] = useState<ThemeConfig>(DEFAULT_CONFIG);
-  const [backgroundPreview, setBackgroundPreview] = useState<string | null>(null);
   const [iconPreviews, setIconPreviews] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('templates');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -745,6 +807,7 @@ function App() {
   const [editingEntryIndex, setEditingEntryIndex] = useState<number | null>(null);
   const [savedConfigs, setSavedConfigs] = useState<SavedConfigRecord[]>([]);
   const [marketplaceThemes, setMarketplaceThemes] = useState<MarketplaceThemeRecord[]>([]);
+  const [marketplacePage, setMarketplacePage] = useState(1);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [customIconTypes, setCustomIconTypes] = useState<CustomIconType[]>([]);
@@ -760,6 +823,12 @@ function App() {
   const detectedEntryIcon = inferPreviewIcon(`${newEntryAlias} ${newEntryName} ${newEntryPath}`, customIconTypes, config.iconFiles);
   const previewItems = getPreviewItems(config, customIconTypes);
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
+  const backgroundPreview = buildBackgroundPreviewUrl(config.backgroundSource, config.backgroundFile);
+  const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
+  const visibleMarketplaceThemes = marketplaceThemes.slice(
+    (marketplacePage - 1) * MARKETPLACE_PAGE_SIZE,
+    marketplacePage * MARKETPLACE_PAGE_SIZE
+  );
 
   const persistDraft = (nextConfig: ThemeConfig, nextCustomIconTypes: CustomIconType[]) => {
     try {
@@ -846,7 +915,6 @@ function App() {
 
       if (restoredConfig) {
         setConfig(restoredConfig);
-        setBackgroundPreview(buildBackgroundPreviewUrl(restoredConfig.backgroundFile));
         setIconPreviews(buildIconPreviewUrls(restoredConfig.iconFiles));
       }
     } catch (error) {
@@ -862,6 +930,12 @@ function App() {
 
     persistDraft(config, customIconTypes);
   }, [config, customIconTypes]);
+
+  useEffect(() => {
+    if (marketplacePage > totalMarketplacePages) {
+      setMarketplacePage(totalMarketplacePages);
+    }
+  }, [marketplacePage, totalMarketplacePages]);
 
   const updateConfig = <K extends keyof ThemeConfig>(key: K, value: ThemeConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
@@ -889,6 +963,24 @@ function App() {
     toast.success(`Applied ${theme.name} community theme!`);
   };
 
+  const selectBuiltInBackground = (background: BuiltInBackground) => {
+    setConfig((prev) => ({
+      ...prev,
+      backgroundSource: 'builtin',
+      backgroundFile: background.filename,
+    }));
+    toast.success(`${background.name} background selected!`);
+  };
+
+  const clearBackgroundSelection = () => {
+    setConfig((prev) => ({
+      ...prev,
+      backgroundSource: 'upload',
+      backgroundFile: undefined,
+    }));
+    toast.success('Background cleared. Solid color mode is active.');
+  };
+
   const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -903,12 +995,17 @@ function App() {
       });
       const data = await response.json();
       if (data.success) {
-        updateConfig('backgroundFile', data.filename);
-        setBackgroundPreview(buildBackgroundPreviewUrl(data.filename));
+        setConfig((prev) => ({
+          ...prev,
+          backgroundSource: 'upload',
+          backgroundFile: data.filename,
+        }));
         toast.success('Background uploaded!');
       }
     } catch (error) {
       toast.error('Error uploading background');
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -1099,7 +1196,6 @@ function App() {
 
     setConfig(nextConfig);
     setCustomIconTypes(nextCustomIconTypes);
-    setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
     setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
     persistDraft(nextConfig, nextCustomIconTypes);
     persistLastConfig({ ...saved, config: nextConfig, customIconTypes: nextCustomIconTypes });
@@ -1118,9 +1214,9 @@ function App() {
     const nextConfig = normalizeConfig(theme.config);
     setConfig(nextConfig);
     setCustomIconTypes(theme.customIconTypes);
-    setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
     setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
     persistDraft(nextConfig, theme.customIconTypes);
+    setActiveTab('marketplace');
     toast.success(`Loaded ${theme.name} from marketplace`);
   };
 
@@ -1153,6 +1249,8 @@ function App() {
 
       const nextMarketplaceThemes = [record, ...marketplaceThemes].slice(0, 24);
       setMarketplaceThemes(nextMarketplaceThemes);
+      setMarketplacePage(1);
+      setActiveTab('marketplace');
       localStorage.setItem(STORAGE_KEYS.marketplaceThemes, JSON.stringify(nextMarketplaceThemes));
       toast.success('Theme shared to marketplace!');
     } catch (error) {
@@ -1177,8 +1275,10 @@ function App() {
         const imported = JSON.parse(event.target?.result as string);
         const nextConfig = normalizeConfig(imported);
         setConfig(nextConfig);
-        setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
         setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
+        if (Array.isArray(imported.customIconTypes)) {
+          setCustomIconTypes(imported.customIconTypes);
+        }
         toast.success('Configuration imported!');
       } catch {
         toast.error('Invalid configuration file');
@@ -1281,7 +1381,6 @@ function App() {
   const resetToDefaults = () => {
     setConfig(DEFAULT_CONFIG);
     setCustomIconTypes([]);
-    setBackgroundPreview(null);
     setIconPreviews({});
     toast.info('Reset to default values');
   };
@@ -1431,6 +1530,29 @@ function App() {
                     </div>
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-4 py-3">
+                    <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[#8b949e]">Quick Access</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setActiveTab('marketplace')}
+                      className="h-8 rounded-full bg-gradient-to-r from-[#1f6feb] via-[#58a6ff] to-[#238636] px-3 text-xs text-white hover:opacity-90"
+                    >
+                      <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+                      Open Share Themes
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveTab('background')}
+                      className="h-8 rounded-full border-[#30363d] bg-[#0d1117] px-3 text-xs text-[#c9d1d9] hover:bg-[#21262d]"
+                    >
+                      <Image className="mr-1.5 h-3.5 w-3.5" />
+                      Backgrounds
+                    </Button>
+                  </div>
+
                   <TooltipProvider>
                     <TabsList className="control-tabs control-tabs-grid grid h-auto gap-3 bg-transparent p-3">
                       {TAB_ITEMS.map((item) => {
@@ -1448,9 +1570,14 @@ function App() {
                                 </div>
 
                                 <div className="space-y-1">
-                                  <div className="text-sm font-semibold text-[#e6edf3]">
+                                  <div className="flex items-center gap-2 text-sm font-semibold text-[#e6edf3]">
                                     <span className="sm:hidden">{item.shortLabel}</span>
                                     <span className="hidden sm:inline">{item.label}</span>
+                                    {item.value === 'marketplace' ? (
+                                      <span className="rounded-full border border-[#58a6ff]/40 bg-[#58a6ff]/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-[#7dd3fc]">
+                                        New
+                                      </span>
+                                    ) : null}
                                   </div>
                                   <p className="tab-hint hidden text-[11px] leading-4 text-[#8b949e] sm:block">
                                     {item.hint}
@@ -1501,21 +1628,13 @@ function App() {
                   </div>
 
                   <div className="space-y-2 pt-4 border-t border-[#30363d]">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="space-y-2">
-                        <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
-                          <Layers className="w-4 h-4" />
-                          Community Themes
-                        </Label>
-                        <p className="text-xs text-[#8b949e]">
-                          Marketplace-style curated themes. Apply one, tweak it, then export your saved version to share.
-                        </p>
-                      </div>
-                      <Button onClick={shareCurrentThemeToMarketplace} disabled={isCapturing} size="sm" variant="outline" className="border-[#30363d] bg-[#0d1117] text-[#c9d1d9] hover:bg-[#21262d]">
-                        {isCapturing ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Camera className="w-4 h-4 mr-1" />}
-                        Share Current Theme
-                      </Button>
-                    </div>
+                    <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
+                      <Layers className="w-4 h-4" />
+                      Community Themes
+                    </Label>
+                    <p className="text-xs text-[#8b949e]">
+                      Curated theme starters. User-shared PNG cards now live in the dedicated `Marketplace` tab.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1547,45 +1666,110 @@ function App() {
                       </button>
                     ))}
                   </div>
+                </TabsContent>
 
-                  <div className="space-y-2 pt-4 border-t border-[#30363d]">
-                    <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
-                      <Save className="w-4 h-4" />
-                      Theme Marketplace
-                    </Label>
-                    <p className="text-xs text-[#8b949e]">
-                      Shared user themes appear here with PNG previews. You can apply them or download the config package.
-                    </p>
+                <TabsContent value="marketplace" className="space-y-4 mt-0">
+                  <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] p-4 sm:p-5">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="space-y-2">
+                        <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
+                          <Save className="w-4 h-4" />
+                          Theme Marketplace
+                        </Label>
+                        <p className="text-xs sm:text-sm text-[#8b949e]">
+                          Share your current preview as a PNG card, then browse user themes 6 at a time on this page.
+                        </p>
+                      </div>
+                      <Button onClick={shareCurrentThemeToMarketplace} disabled={isCapturing} className="bg-gradient-to-r from-[#1f6feb] via-[#58a6ff] to-[#238636] text-white hover:opacity-90">
+                        {isCapturing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
+                        Share Current Theme
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-2xl border border-[#30363d] bg-[#161b22]/80 p-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-[#e6edf3]">Shared Themes</p>
+                      <p className="text-xs text-[#8b949e]">
+                        {marketplaceThemes.length > 0
+                          ? `Showing ${(marketplacePage - 1) * MARKETPLACE_PAGE_SIZE + 1}-${Math.min(marketplacePage * MARKETPLACE_PAGE_SIZE, marketplaceThemes.length)} of ${marketplaceThemes.length} shared themes`
+                          : 'No shared themes yet. Publish the first one from your live preview.'}
+                      </p>
+                    </div>
+                    <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
+                      Page {marketplacePage} / {totalMarketplacePages}
+                    </div>
                   </div>
 
                   {marketplaceThemes.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {marketplaceThemes.map((theme) => (
-                        <div key={theme.id} className="overflow-hidden rounded-2xl border border-[#30363d] bg-[#0d1117]">
-                          <div className="aspect-[16/10] overflow-hidden border-b border-[#30363d] bg-black">
-                            <img src={theme.previewImage} alt={theme.name} className="h-full w-full object-cover" />
-                          </div>
-                          <div className="space-y-3 p-4">
-                            <div>
-                              <h3 className="text-sm font-semibold text-[#e6edf3]">{theme.name}</h3>
-                              <p className="text-[11px] text-[#8b949e]">
-                                Shared {new Date(theme.createdAt).toLocaleDateString()}
-                              </p>
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {visibleMarketplaceThemes.map((theme) => (
+                          <div key={theme.id} className="overflow-hidden rounded-2xl border border-[#30363d] bg-[#0d1117]">
+                            <div className="aspect-[16/10] overflow-hidden border-b border-[#30363d] bg-black">
+                              <img src={theme.previewImage} alt={theme.name} className="h-full w-full object-cover" />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                              <Button onClick={() => applyMarketplaceTheme(theme)} size="sm" variant="outline" className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]">
-                                Apply
-                              </Button>
-                              <Button onClick={() => downloadMarketplaceTheme(theme)} size="sm" className="bg-gradient-to-r from-[#1f6feb] to-[#58a6ff] text-white hover:opacity-90">
-                                Download
-                              </Button>
+                            <div className="space-y-3 p-4">
+                              <div>
+                                <h3 className="text-sm font-semibold text-[#e6edf3]">{theme.name}</h3>
+                                <p className="text-[11px] text-[#8b949e]">
+                                  Shared {new Date(theme.createdAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button onClick={() => applyMarketplaceTheme(theme)} size="sm" variant="outline" className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]">
+                                  Apply
+                                </Button>
+                                <Button onClick={() => downloadMarketplaceTheme(theme)} size="sm" className="bg-gradient-to-r from-[#1f6feb] to-[#58a6ff] text-white hover:opacity-90">
+                                  Download
+                                </Button>
+                              </div>
                             </div>
                           </div>
+                        ))}
+                      </div>
+
+                      {totalMarketplacePages > 1 && (
+                        <div className="flex flex-wrap items-center justify-center gap-2 rounded-2xl border border-[#30363d] bg-[#0d1117] p-3">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setMarketplacePage((prev) => Math.max(1, prev - 1))}
+                            disabled={marketplacePage === 1}
+                            className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]"
+                          >
+                            Previous
+                          </Button>
+                          {Array.from({ length: totalMarketplacePages }, (_, index) => index + 1).map((page) => (
+                            <Button
+                              key={page}
+                              type="button"
+                              size="sm"
+                              variant={page === marketplacePage ? 'default' : 'outline'}
+                              onClick={() => setMarketplacePage(page)}
+                              className={page === marketplacePage
+                                ? 'bg-gradient-to-r from-[#1f6feb] to-[#58a6ff] text-white hover:opacity-90'
+                                : 'border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]'}
+                            >
+                              {page}
+                            </Button>
+                          ))}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setMarketplacePage((prev) => Math.min(totalMarketplacePages, prev + 1))}
+                            disabled={marketplacePage === totalMarketplacePages}
+                            className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]"
+                          >
+                            Next
+                          </Button>
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="rounded-2xl border border-dashed border-[#30363d] bg-[#0d1117] px-4 py-8 text-center text-sm text-[#8b949e]">
+                    <div className="rounded-2xl border border-dashed border-[#30363d] bg-[#0d1117] px-4 py-10 text-center text-sm text-[#8b949e]">
                       No user themes shared yet. Click `Share Current Theme` to publish the first preview card.
                     </div>
                   )}
@@ -1594,24 +1778,113 @@ function App() {
                 {/* Background Tab */}
                 <TabsContent value="background" className="space-y-4 mt-0">
                   <div className="space-y-2">
-                    <Label className="text-[#58a6ff] text-sm">Background Image</Label>
-                    <div 
-                      onClick={() => backgroundInputRef.current?.click()}
-                      className="border-2 border-dashed border-[#30363d] rounded-xl p-4 sm:p-8 text-center cursor-pointer hover:border-[#58a6ff] hover:bg-[#21262d]/50 transition-all"
-                    >
-                      {backgroundPreview ? (
-                        <img src={backgroundPreview} alt="Background" className="max-h-24 sm:max-h-32 mx-auto rounded-lg object-contain" />
-                      ) : (
-                        <>
-                          <Upload className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 text-[#58a6ff]" />
-                          <p className="text-xs sm:text-sm text-[#c9d1d9]">Click to upload background</p>
-                        </>
-                      )}
-                      <p className="text-[10px] sm:text-xs text-[#6e7681] mt-1">JPG, PNG, GIF, WebP (max 10MB)</p>
-                    </div>
-                    <input ref={backgroundInputRef} type="file" accept="image/*" onChange={handleBackgroundUpload} className="hidden" />
+                    <Label className="text-[#58a6ff] text-sm">Preset Backgrounds</Label>
+                    <p className="text-xs text-[#8b949e]">
+                      Pick a built-in wallpaper, or keep the solid color and upload your own custom background.
+                    </p>
                   </div>
-                  
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {BUILT_IN_BACKGROUNDS.map((background) => {
+                      const isSelected = config.backgroundSource === 'builtin' && config.backgroundFile === background.filename;
+                      const previewSrc = buildBackgroundPreviewUrl('builtin', background.filename);
+
+                      return (
+                        <button
+                          key={background.id}
+                          type="button"
+                          onClick={() => selectBuiltInBackground(background)}
+                          className={`overflow-hidden rounded-2xl border text-left transition-all ${
+                            isSelected
+                              ? 'border-[#58a6ff] bg-[#0d1117] shadow-lg shadow-blue-500/10'
+                              : 'border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]'
+                          }`}
+                        >
+                          <div className="aspect-[16/9] overflow-hidden border-b border-[#30363d] bg-black">
+                            {previewSrc ? (
+                              <img src={previewSrc} alt={background.name} className="h-full w-full object-cover" />
+                            ) : null}
+                          </div>
+                          <div className="space-y-2 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <h3 className="text-sm font-semibold text-[#e6edf3]">{background.name}</h3>
+                              <span
+                                className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                                style={{ borderColor: `${background.accent}66`, color: background.accent }}
+                              >
+                                {isSelected ? 'Selected' : 'Preset'}
+                              </span>
+                            </div>
+                            <p className="text-xs leading-5 text-[#8b949e]">{background.summary}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] gap-3">
+                    <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div>
+                          <Label className="text-[#58a6ff] text-sm">Selected Background</Label>
+                          <p className="text-xs text-[#8b949e]">
+                            {config.backgroundFile
+                              ? config.backgroundSource === 'builtin'
+                                ? 'Using a built-in marketplace-ready background.'
+                                : 'Using your uploaded custom wallpaper.'
+                              : 'No image selected. Preview falls back to the solid background color.'}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={clearBackgroundSelection}
+                          className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]"
+                        >
+                          Solid Color Only
+                        </Button>
+                      </div>
+
+                      <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#111827]">
+                        {backgroundPreview ? (
+                          <img src={backgroundPreview} alt="Selected background" className="aspect-[16/9] w-full object-cover" />
+                        ) : (
+                          <div
+                            className="aspect-[16/9] w-full"
+                            style={{
+                              background: `radial-gradient(circle at center, ${config.primaryColor}20 0%, ${config.desktopColor} 55%, #020617 100%)`,
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-dashed border-[#30363d] bg-[#0d1117] p-4">
+                      <div className="space-y-2">
+                        <Label className="text-[#58a6ff] text-sm">Upload Custom Background</Label>
+                        <p className="text-xs text-[#8b949e]">
+                          Your upload overrides the preset and becomes the active background instantly.
+                        </p>
+                      </div>
+                      <div
+                        onClick={() => backgroundInputRef.current?.click()}
+                        className="mt-4 flex min-h-[220px] cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#30363d] px-4 text-center transition-all hover:border-[#58a6ff] hover:bg-[#21262d]/50"
+                      >
+                        {config.backgroundSource === 'upload' && backgroundPreview ? (
+                          <img src={backgroundPreview} alt="Uploaded background" className="max-h-36 rounded-lg object-contain" />
+                        ) : (
+                          <>
+                            <Upload className="w-8 h-8 mb-3 text-[#58a6ff]" />
+                            <p className="text-sm text-[#c9d1d9]">Click to upload background</p>
+                          </>
+                        )}
+                        <p className="mt-2 text-[11px] text-[#6e7681]">JPG, PNG, GIF, WebP (max 10MB)</p>
+                      </div>
+                      <input ref={backgroundInputRef} type="file" accept="image/*" onChange={handleBackgroundUpload} className="hidden" />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <Label className="text-[#58a6ff] text-sm">Fallback Background Color</Label>
                     <div className="flex items-center gap-2">

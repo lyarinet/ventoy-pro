@@ -49,6 +49,7 @@ const uploadsDir = path.join(__dirname, 'uploads');
 const backgroundsDir = path.join(uploadsDir, 'backgrounds');
 const iconsDir = path.join(uploadsDir, 'icons');
 const outputDir = path.join(__dirname, 'output');
+const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
 
 [uploadsDir, backgroundsDir, iconsDir, outputDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
@@ -203,8 +204,9 @@ app.post('/api/download/theme', async (req, res) => {
     archive.append(installContent, { name: 'INSTALL.md' });
 
     // Add background image
-    if (config.backgroundFile && fs.existsSync(path.join(backgroundsDir, config.backgroundFile))) {
-      archive.file(path.join(backgroundsDir, config.backgroundFile), { name: `backgrounds/${config.backgroundFile}` });
+    const backgroundRoot = config.backgroundSource === 'builtin' ? builtInBackgroundsDir : backgroundsDir;
+    if (config.backgroundFile && fs.existsSync(path.join(backgroundRoot, config.backgroundFile))) {
+      archive.file(path.join(backgroundRoot, config.backgroundFile), { name: `backgrounds/${config.backgroundFile}` });
     }
 
     // Add icons
