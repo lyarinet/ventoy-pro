@@ -51,6 +51,11 @@ interface SavedConfigRecord {
   customIconTypes?: CustomIconType[];
 }
 
+interface PreviewMenuItem {
+  name: string;
+  icon: string;
+}
+
 // Font options
 const FONT_OPTIONS = [
   { value: 'Unifont Regular', label: 'Unifont (Default)' },
@@ -143,6 +148,89 @@ const ADVANCED_PRESETS = [
     text: '#f39c12',
     secondary: '#e74c3c',
     accent: '#f1c40f'
+  },
+];
+
+const TAB_ITEMS: Array<{
+  value: string;
+  label: string;
+  shortLabel: string;
+  hint: string;
+  tooltip: string;
+  icon: typeof Sparkles;
+  accent: string;
+}> = [
+  {
+    value: 'templates',
+    label: 'Templates',
+    shortLabel: 'Templates',
+    hint: 'Ready-made visual themes',
+    tooltip: 'Pre-made theme presets with custom colors',
+    icon: Sparkles,
+    accent: 'from-[#c084fc] via-[#8b5cf6] to-[#38bdf8]',
+  },
+  {
+    value: 'background',
+    label: 'Background',
+    shortLabel: 'BG',
+    hint: 'Upload wallpapers and base color',
+    tooltip: 'Upload and configure background image',
+    icon: Image,
+    accent: 'from-[#22c55e] via-[#14b8a6] to-[#38bdf8]',
+  },
+  {
+    value: 'icons',
+    label: 'Icons',
+    shortLabel: 'Icons',
+    hint: 'Built-in and custom OS marks',
+    tooltip: 'Manage OS icons (built-in & custom)',
+    icon: Layers,
+    accent: 'from-[#f59e0b] via-[#f97316] to-[#ef4444]',
+  },
+  {
+    value: 'colors',
+    label: 'Colors',
+    shortLabel: 'Colors',
+    hint: 'Tune accents and text palette',
+    tooltip: 'Customize theme colors and accents',
+    icon: Palette,
+    accent: 'from-[#fb7185] via-[#f43f5e] to-[#ec4899]',
+  },
+  {
+    value: 'fonts',
+    label: 'Fonts',
+    shortLabel: 'Fonts',
+    hint: 'Control typography and sizing',
+    tooltip: 'Adjust font families and sizes',
+    icon: Type,
+    accent: 'from-[#2dd4bf] via-[#06b6d4] to-[#3b82f6]',
+  },
+  {
+    value: 'effects',
+    label: 'Effects',
+    shortLabel: 'Effects',
+    hint: 'Motion, glow and glass styling',
+    tooltip: 'Visual effects, animations & styling',
+    icon: Zap,
+    accent: 'from-[#facc15] via-[#eab308] to-[#f97316]',
+  },
+  {
+    value: 'layout',
+    label: 'Layout',
+    shortLabel: 'Layout',
+    hint: 'Place menu blocks precisely',
+    tooltip: 'Menu position, size & resolution',
+    icon: Layout,
+    accent: 'from-[#38bdf8] via-[#3b82f6] to-[#6366f1]',
+  },
+  {
+    value: 'advanced',
+    label: 'Advanced',
+    shortLabel: 'Advanced',
+    hint: 'Passwords and extra controls',
+    tooltip: 'Custom entries, passwords & advanced settings',
+    icon: Shield,
+    accent: 'from-[#4ade80] via-[#22c55e] to-[#16a34a]',
   },
 ];
 
@@ -270,6 +358,67 @@ const buildIconPreviewUrls = (iconFiles?: Record<string, string>) =>
       .map(([type, filename]) => [type, `${API_URL}/uploads/icons/${filename}`])
   );
 
+const DEFAULT_PREVIEW_ITEMS: PreviewMenuItem[] = [
+  { name: 'Windows 11 Pro.iso', icon: 'windows' },
+  { name: 'Ubuntu 22.04 LTS.iso', icon: 'ubuntu' },
+  { name: 'Kali Linux 2024.iso', icon: 'kali' },
+  { name: 'Fedora Workstation.iso', icon: 'fedora' },
+  { name: 'Arch Linux.iso', icon: 'arch' },
+];
+
+const inferPreviewIcon = (
+  text: string,
+  customIconTypes: CustomIconType[],
+  iconFiles?: Record<string, string>
+) => {
+  const normalizedText = text.toLowerCase();
+
+  const customMatch = customIconTypes.find((icon) => normalizedText.includes(icon.id.toLowerCase()));
+  if (customMatch && iconFiles?.[customMatch.id]) {
+    return customMatch.id;
+  }
+
+  const builtInMatch = ICON_TYPES.find((icon) => normalizedText.includes(icon.id.toLowerCase()));
+  if (builtInMatch) {
+    return builtInMatch.id;
+  }
+
+  if (normalizedText.includes('win')) return 'windows';
+  if (normalizedText.includes('mint')) return 'mint';
+  if (normalizedText.includes('manjaro')) return 'manjaro';
+  if (normalizedText.includes('pop')) return 'popos';
+  if (normalizedText.includes('mac')) return 'macos';
+  if (normalizedText.includes('debian')) return 'debian';
+  if (normalizedText.includes('fedora')) return 'fedora';
+  if (normalizedText.includes('arch')) return 'arch';
+  if (normalizedText.includes('ubuntu')) return 'ubuntu';
+  if (normalizedText.includes('kali')) return 'kali';
+  if (normalizedText.includes('linux')) return 'linux';
+
+  return 'usb';
+};
+
+const getPreviewItems = (config: ThemeConfig, customIconTypes: CustomIconType[]) => {
+  if (config.customEntries.length === 0) {
+    return DEFAULT_PREVIEW_ITEMS;
+  }
+
+  return config.customEntries.slice(0, 5).map((entry) => {
+    const label = entry.alias || entry.name || entry.path;
+    const sourceText = `${entry.alias} ${entry.name} ${entry.path}`;
+
+    return {
+      name: label,
+      icon: inferPreviewIcon(sourceText, customIconTypes, config.iconFiles),
+    };
+  });
+};
+
+const getPreviewAnimationClass = (animation: string) => {
+  if (animation === 'none') return '';
+  return `animate-${animation}`;
+};
+
 // OS logos as SVG components
 const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode => {
   const logos: Record<string, ReactNode> = {
@@ -357,7 +506,6 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [previewResolution, setPreviewResolution] = useState('1920x1080');
   const [newEntryName, setNewEntryName] = useState('');
   const [newEntryPath, setNewEntryPath] = useState('');
   const [newEntryAlias, setNewEntryAlias] = useState('');
@@ -372,6 +520,8 @@ function App() {
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const isFirstPersistenceRun = useRef(true);
+  const previewItems = getPreviewItems(config, customIconTypes);
+  const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
 
   const persistDraft = (nextConfig: ThemeConfig, nextCustomIconTypes: CustomIconType[]) => {
     try {
@@ -854,119 +1004,53 @@ function App() {
             </CardHeader>
             <CardContent className="px-3 sm:px-6">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid grid-cols-4 sm:grid-cols-8 bg-[#0d1117] mb-4 p-1 gap-1 overflow-x-auto">
+                <div className="control-tabs-shell mb-5 overflow-hidden rounded-[28px] border border-[#30363d]">
+                  <div className="flex items-center justify-between gap-3 border-b border-white/5 px-4 py-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Control Deck</p>
+                      <p className="text-xs text-[#8b949e]">Choose a section and shape your Ventoy menu from here.</p>
+                    </div>
+                    <div className="hidden rounded-full border border-[#30363d] bg-[#0d1117]/80 px-3 py-1 text-[11px] font-medium text-[#c9d1d9] sm:block">
+                      Active: {TAB_ITEMS.find((item) => item.value === activeTab)?.label ?? 'Templates'}
+                    </div>
+                  </div>
+
                   <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="templates" className="text-[10px] sm:text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-[#a371f7] data-[state=active]:to-[#58a6ff] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Sparkles className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Templates</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Pre-made theme presets with custom colors</p>
-                      </TooltipContent>
-                    </Tooltip>
+                    <TabsList className="control-tabs control-tabs-grid grid h-auto gap-3 bg-transparent p-3">
+                      {TAB_ITEMS.map((item) => {
+                        const Icon = item.icon;
+
+                        return (
+                          <Tooltip key={item.value}>
+                            <TooltipTrigger asChild>
+                              <TabsTrigger value={item.value} className="control-tab-trigger h-auto min-h-[150px] flex-col items-start justify-start gap-4 rounded-[22px] border border-transparent px-4 py-4 text-left whitespace-normal">
+                                <div className="flex w-full items-start justify-between gap-3">
+                                  <span className={`tab-icon flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg shadow-black/25`}>
+                                    <Icon className="h-4 w-4" />
+                                  </span>
+                                  <ChevronRight className="tab-arrow mt-1 hidden h-4 w-4 text-[#6e7681] sm:block" />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <div className="text-sm font-semibold text-[#e6edf3]">
+                                    <span className="sm:hidden">{item.shortLabel}</span>
+                                    <span className="hidden sm:inline">{item.label}</span>
+                                  </div>
+                                  <p className="tab-hint hidden text-[11px] leading-4 text-[#8b949e] sm:block">
+                                    {item.hint}
+                                  </p>
+                                </div>
+                              </TabsTrigger>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
+                              <p className="text-xs">{item.tooltip}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </TabsList>
                   </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="background" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Image className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">BG</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Upload and configure background image</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="icons" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Layers className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Icons</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Manage OS icons (built-in & custom)</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="colors" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Palette className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Colors</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Customize theme colors and accents</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="fonts" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Type className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Fonts</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Adjust font families and sizes</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="effects" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Zap className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Effects</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Visual effects, animations & styling</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="layout" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Layout className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Layout</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9]">
-                        <p className="text-xs">Menu position, size & resolution</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <TabsTrigger value="advanced" className="text-[10px] sm:text-xs data-[state=active]:bg-[#238636] data-[state=active]:text-white text-[#8b949e] px-1 sm:px-2">
-                          <Shield className="w-3 h-3 sm:mr-1" />
-                          <span className="hidden sm:inline">Advanced</span>
-                        </TabsTrigger>
-                      </TooltipTrigger>
-                      <TooltipContent side="bottom" className="bg-[#161b22] border-[#30363d] text-[#c9d1d9] max-w-xs">
-                        <p className="text-xs">Custom entries, passwords & advanced settings</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TabsList>
+                </div>
 
                 {/* Templates Tab */}
                 <TabsContent value="templates" className="space-y-4 mt-0">
@@ -1378,9 +1462,9 @@ function App() {
               {RESOLUTION_OPTIONS.map((res) => (
                 <button
                   key={res.value}
-                  onClick={() => setPreviewResolution(res.value)}
+                  onClick={() => updateConfig('resolution', res.value)}
                   className={`px-2 py-1 rounded-md text-[10px] sm:text-xs whitespace-nowrap transition-colors ${
-                    previewResolution === res.value 
+                    config.resolution === res.value 
                       ? 'bg-[#238636] text-white' 
                       : 'bg-[#21262d] text-[#8b949e] hover:bg-[#30363d]'
                   }`}
@@ -1394,20 +1478,21 @@ function App() {
               <CardHeader className="pb-2 px-4 sm:px-6">
                 <CardTitle className="text-base sm:text-lg flex items-center gap-2 text-[#c9d1d9]">
                   <Eye className="w-4 h-4 sm:w-5 sm:h-5 text-[#58a6ff]" />
-                  Live Preview ({previewResolution})
+                  Live Preview ({config.resolution})
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 sm:px-6">
                 <div 
-                  className="relative rounded-xl overflow-hidden mx-auto shadow-2xl"
+                  className={`relative rounded-xl overflow-hidden mx-auto shadow-2xl ${previewAnimationClass}`}
                   style={{ 
-                    aspectRatio: getAspectRatio(previewResolution),
+                    aspectRatio: getAspectRatio(config.resolution),
                     maxHeight: '400px',
                     backgroundColor: config.desktopColor,
                     backgroundImage: backgroundPreview ? `url(${backgroundPreview})` : undefined,
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     boxShadow: config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined,
+                    animationDuration: `${config.animationSpeed}ms`,
                   }}
                 >
                   {/* Header */}
@@ -1441,13 +1526,7 @@ function App() {
                     }}
                   >
                     <div className="p-2 sm:p-3 space-y-0.5 sm:space-y-1">
-                      {[
-                        { name: 'Windows 11 Pro.iso', icon: 'windows' },
-                        { name: 'Ubuntu 22.04 LTS.iso', icon: 'ubuntu' },
-                        { name: 'Kali Linux 2024.iso', icon: 'kali' },
-                        { name: 'Fedora Workstation.iso', icon: 'fedora' },
-                        { name: 'Arch Linux.iso', icon: 'arch' },
-                      ].map((item, i) => (
+                      {previewItems.map((item, i) => (
                         <div
                           key={i}
                           className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-1 sm:py-1.5 transition-all"
@@ -1460,9 +1539,24 @@ function App() {
                           }}
                         >
                           {config.showIcons && (
-                            <div style={{ color: ICON_TYPES.find(t => t.id === item.icon)?.color }}>
-                              <OSLogo type={item.icon} size={14} />
-                            </div>
+                            iconPreviews[item.icon] ? (
+                              <img
+                                src={iconPreviews[item.icon]}
+                                alt={item.icon}
+                                className="h-[14px] w-[14px] object-contain"
+                              />
+                            ) : customIconTypes.find((icon) => icon.id === item.icon) ? (
+                              <div
+                                className="flex h-[14px] w-[14px] items-center justify-center rounded-full text-[8px] font-bold text-white"
+                                style={{ backgroundColor: customIconTypes.find((icon) => icon.id === item.icon)?.color }}
+                              >
+                                {item.name.charAt(0).toUpperCase()}
+                              </div>
+                            ) : (
+                              <div style={{ color: ICON_TYPES.find(t => t.id === item.icon)?.color }}>
+                                <OSLogo type={item.icon} size={14} />
+                              </div>
+                            )
                           )}
                           <span className="truncate">{item.name}</span>
                         </div>
