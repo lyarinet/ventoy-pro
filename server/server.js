@@ -26,7 +26,6 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const appDataDir = process.env.APP_DATA_DIR || path.join(__dirname, 'data');
 
 // Middleware
 app.use(cors());
@@ -73,16 +72,16 @@ app.get('/', (req, res) => {
 });
 
 // Ensure directories exist
-const uploadsDir = path.join(appDataDir, 'uploads');
+const uploadsDir = path.join(__dirname, 'uploads');
 const backgroundsDir = path.join(uploadsDir, 'backgrounds');
 const iconsDir = path.join(uploadsDir, 'icons');
 const brandingDir = path.join(uploadsDir, 'branding');
-const outputDir = path.join(appDataDir, 'output');
+const outputDir = path.join(__dirname, 'output');
 const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
 const themeAssetsDir = path.join(__dirname, 'theme-assets');
 const builtInIconsDir = path.join(__dirname, 'builtin-icons');
-const generatedIconsDir = path.join(appDataDir, 'generated-icons');
-const dataDir = process.env.DATA_DIR || process.env.APP_DATA_DIR || path.join(__dirname, 'data');
+const generatedIconsDir = path.join(__dirname, 'generated-icons');
+const dataDir = path.join(__dirname, 'data');
 
 [uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir, generatedIconsDir].forEach(dir => {
   if (!fs.existsSync(dir)) {

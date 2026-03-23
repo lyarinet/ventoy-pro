@@ -84,31 +84,6 @@ npm run server
 
 ## 🌐 Deployment
 
-### Easiest Production Option: Render
-
-If you want the whole app to work together with:
-
-- login/auth
-- uploads
-- shared themes
-- SQLite database
-- generated ZIP packages
-
-then `Render` is the easiest option for this codebase.
-
-This repo now includes `render.yaml`, so you can deploy it as a single Render Web Service.
-
-Included:
-
-- frontend served by Express
-- backend API
-- SQLite database
-- persistent disk for uploads and database files
-
-Render files:
-
-- `render.yaml`
-
 ### Netlify Frontend + Separate Backend
 
 This project now supports a clean deployment split:
