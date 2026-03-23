@@ -4,8 +4,9 @@
 # This script will:
 # 1. Kill any process using port 3001 (server) and 5173 (frontend dev server)
 # 2. Install all dependencies
-# 3. Build the frontend
-# 4. Start the server
+# 3. Initialize SQLite database and migrate old JSON records
+# 4. Build the frontend
+# 5. Start the server
 
 echo "🎨 Ventoy Theme Generator Pro"
 echo "=============================="
@@ -66,21 +67,21 @@ else
     exit 1
 fi
 
-# Install html-to-image for screenshot functionality
-echo ""
-echo "📍 Installing html-to-image for screenshots..."
+# Step 3: Initialize database
+echo "📍 Step 3: Initializing SQLite database..."
 echo "-----------------------------------"
-npm install html-to-image --save
+npm run db:init
 
 if [ $? -eq 0 ]; then
-    echo -e "${GREEN}✓ html-to-image installed successfully${NC}"
+    echo -e "${GREEN}✓ SQLite database is ready${NC}"
 else
-    echo -e "${YELLOW}⚠ Warning: Failed to install html-to-image${NC}"
+    echo -e "${RED}✗ Database initialization failed${NC}"
+    exit 1
 fi
 echo ""
 
-# Step 3: Build the project
-echo "📍 Step 3: Building the project..."
+# Step 4: Build the project
+echo "📍 Step 4: Building the project..."
 echo "-----------------------------------"
 echo -e "${BLUE}Building frontend application...${NC}"
 npm run build
@@ -93,17 +94,19 @@ else
 fi
 echo ""
 
-# Step 4: Create necessary directories
-echo "📍 Step 4: Setting up directories..."
+# Step 5: Create necessary directories
+echo "📍 Step 5: Setting up directories..."
 echo "-----------------------------------"
 mkdir -p server/uploads/backgrounds
 mkdir -p server/uploads/icons
+mkdir -p server/uploads/branding
 mkdir -p server/output
+mkdir -p server/data
 echo -e "${GREEN}✓ Directories created${NC}"
 echo ""
 
-# Step 5: Start the server
-echo "📍 Step 5: Starting server..."
+# Step 6: Start the server
+echo "📍 Step 6: Starting server..."
 echo "-----------------------------------"
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════╗${NC}"

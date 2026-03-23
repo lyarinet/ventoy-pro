@@ -6,6 +6,19 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import {
+  DB_PATH,
+  DEFAULT_SETTINGS,
+  getDatabaseInfo,
+  getSessions,
+  getSettings,
+  getThemes,
+  getUsers,
+  saveSessions,
+  saveSettings,
+  saveThemes,
+  saveUsers,
+} from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -65,46 +78,12 @@ const brandingDir = path.join(uploadsDir, 'branding');
 const outputDir = path.join(__dirname, 'output');
 const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
 const dataDir = path.join(__dirname, 'data');
-const usersFile = path.join(dataDir, 'users.json');
-const themesFile = path.join(dataDir, 'themes.json');
-const sessionsFile = path.join(dataDir, 'sessions.json');
-const settingsFile = path.join(dataDir, 'settings.json');
 
 [uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 });
-
-const DEFAULT_SETTINGS = {
-  siteTitle: 'Ventoy Pro',
-  siteSubtitle: 'Advanced Theme Generator',
-  logoUrl: '',
-  logoText: 'VP',
-};
-
-function ensureJsonFile(filePath, fallbackValue) {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(fallbackValue, null, 2));
-  }
-}
-
-function readJsonFile(filePath, fallbackValue) {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return fallbackValue;
-    }
-    const raw = fs.readFileSync(filePath, 'utf8');
-    return raw ? JSON.parse(raw) : fallbackValue;
-  } catch (error) {
-    console.error(`Failed to read ${filePath}:`, error);
-    return fallbackValue;
-  }
-}
-
-function writeJsonFile(filePath, value) {
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
-}
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
@@ -127,38 +106,6 @@ function sanitizeUser(user) {
     role: user.role,
     createdAt: user.createdAt,
   };
-}
-
-function getUsers() {
-  return readJsonFile(usersFile, []);
-}
-
-function saveUsers(users) {
-  writeJsonFile(usersFile, users);
-}
-
-function getThemes() {
-  return readJsonFile(themesFile, []);
-}
-
-function saveThemes(themes) {
-  writeJsonFile(themesFile, themes);
-}
-
-function getSessions() {
-  return readJsonFile(sessionsFile, []);
-}
-
-function saveSessions(sessions) {
-  writeJsonFile(sessionsFile, sessions);
-}
-
-function getSettings() {
-  return readJsonFile(settingsFile, DEFAULT_SETTINGS);
-}
-
-function saveSettings(settings) {
-  writeJsonFile(settingsFile, settings);
 }
 
 function createSession(userId) {
@@ -213,11 +160,6 @@ function requireAdmin(req, res, next) {
   }
   next();
 }
-
-ensureJsonFile(usersFile, []);
-ensureJsonFile(themesFile, []);
-ensureJsonFile(sessionsFile, []);
-ensureJsonFile(settingsFile, DEFAULT_SETTINGS);
 
 if (getUsers().length === 0) {
   const adminPassword = hashPassword('admin123');
@@ -627,7 +569,8 @@ app.get('/api/status', (req, res) => {
   res.json({
     success: true,
     background: uploadedFiles.background,
-    icons: uploadedFiles.icons
+    icons: uploadedFiles.icons,
+    database: getDatabaseInfo(),
   });
 });
 
@@ -1059,10 +1002,13 @@ app.use((error, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
+  const dbInfo = getDatabaseInfo();
   console.log(`╔══════════════════════════════════════════════════════════╗`);
   console.log(`║     Ventoy Theme Generator Pro - Server Running          ║`);
   console.log(`╠══════════════════════════════════════════════════════════╣`);
   console.log(`║  URL: http://localhost:${PORT}                              ║`);
+  console.log(`║  Database: SQLite (${DB_PATH})`);
+  console.log(`║  Records: ${dbInfo.users} users / ${dbInfo.themes} themes / ${dbInfo.sessions} sessions`);
   console.log(`╠══════════════════════════════════════════════════════════╣`);
   console.log(`║  API Endpoints:                                          ║`);
   console.log(`║    POST /api/upload/background  - Upload background      ║`);

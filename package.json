@@ -8,8 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "db:init": "node server/init-db.js",
     "server": "node server/server.js",
-    "start": "npm run server"
+    "start": "npm run db:init && npm run server",
+    "setup": "npm run db:init && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -44,6 +46,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.1.0",
     "archiver": "^7.0.1",
+    "better-sqlite3": "^12.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

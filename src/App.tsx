@@ -38,6 +38,17 @@ const resolveServerAssetUrl = (assetUrl: string) => {
   return assetUrl;
 };
 
+const FOOTER_BRAND = {
+  label: 'Powered by Lyaritech',
+  href: 'https://lyaritech.com',
+};
+
+const FOOTER_MENU_ITEMS = [
+  { label: 'Templates', href: '#' },
+  { label: 'Share Themes', href: '#' },
+  { label: 'Download Pack', href: '#' },
+];
+
 // Icon types
 const ICON_TYPES = [
   { id: 'windows', name: 'Windows', color: '#00a4ef' },
@@ -90,6 +101,7 @@ interface GlobalSettings {
   siteTitle: string;
   siteSubtitle: string;
   logoUrl: string;
+  faviconUrl: string; // Naya field
   logoText: string;
 }
 
@@ -97,6 +109,7 @@ const normalizeGlobalSettings = (settings?: Partial<GlobalSettings>): GlobalSett
   siteTitle: settings?.siteTitle || 'Ventoy Pro',
   siteSubtitle: settings?.siteSubtitle || 'Advanced Theme Generator',
   logoUrl: resolveServerAssetUrl(settings?.logoUrl || ''),
+  faviconUrl: resolveServerAssetUrl(settings?.logoUrl || '/favicon.ico'), // Default favicon path  
   logoText: settings?.logoText || 'VP',
 });
 
@@ -1184,6 +1197,7 @@ function App() {
   const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
   const currentWizardIndex = WIZARD_STEPS.findIndex((step) => step.value === wizardStep);
   const currentWizardStep = WIZARD_STEPS[currentWizardIndex] ?? WIZARD_STEPS[0];
+  const currentYear = new Date().getFullYear();
   const visibleMarketplaceThemes = marketplaceThemes.slice(
     (marketplacePage - 1) * MARKETPLACE_PAGE_SIZE,
     marketplacePage * MARKETPLACE_PAGE_SIZE
@@ -3620,6 +3634,39 @@ function App() {
           </div>
         </Tabs>
       </main>
+
+  <footer className="border-t border-[#30363d] bg-[#010409]/80 py-6 backdrop-blur-md">
+    <div className="mx-auto flex max-w-[1600px] flex-col items-center justify-between gap-6 px-4 md:flex-row">
+      
+      {/* Branding & Copyright Section */}
+      <div className="flex flex-col items-center gap-1 md:items-start">
+        <p className="text-xs text-[#8b949e]">
+          © {currentYear} <span className="text-[#e6edf3] font-medium">Lyaritech</span>. All rights reserved.
+        </p>
+        <a
+          href={FOOTER_BRAND.href}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm font-semibold text-[#58a6ff] transition-opacity hover:opacity-80"
+        >
+          {FOOTER_BRAND.label}
+        </a>
+      </div>
+
+      {/* Navigation Links */}
+      <nav className="flex flex-wrap justify-center gap-3">
+        {FOOTER_MENU_ITEMS.map((item) => (
+          <a
+            key={`${item.label}-${item.href}`}
+            href={item.href}
+            className="rounded-md border border-[#30363d] bg-[#0d1117] px-4 py-1.5 text-xs font-medium text-[#c9d1d9] transition-all hover:border-[#58a6ff] hover:bg-[#161b22] hover:text-[#58a6ff]"
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+    </div>
+  </footer>
     </div>
   );
 }
