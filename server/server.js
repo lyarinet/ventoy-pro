@@ -381,6 +381,49 @@ ${showFooter ? `+ label {
 `;
 }
 
+function addMenuClassEntry(menuClass, seenEntries, key, className) {
+  const normalizedKey = String(key || '').trim().toLowerCase();
+  const normalizedClass = String(className || '').trim();
+
+  if (!normalizedKey || !normalizedClass) {
+    return;
+  }
+
+  const entryId = `${normalizedKey}:${normalizedClass}`;
+  if (seenEntries.has(entryId)) {
+    return;
+  }
+
+  seenEntries.add(entryId);
+  menuClass.push({ key: normalizedKey, class: normalizedClass });
+}
+
+function getCustomEntryKeys(entry) {
+  const candidates = [
+    entry?.alias,
+    entry?.name,
+    entry?.path,
+    path.basename(entry?.path || ''),
+    path.basename(entry?.path || '', path.extname(entry?.path || '')),
+  ];
+
+  const keys = new Set();
+
+  candidates.forEach((value) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) {
+      return;
+    }
+
+    keys.add(normalized);
+    keys.add(normalized.replace(/\s+/g, ''));
+    keys.add(normalized.replace(/[^a-z0-9]+/g, ' ').trim());
+    keys.add(normalized.replace(/[^a-z0-9]+/g, ''));
+  });
+
+  return [...keys].filter(Boolean);
+}
+
 function generateVentoyJson(config) {
   const {
     resolution = '1920x1080',
@@ -389,10 +432,12 @@ function generateVentoyJson(config) {
     passwordProtected = false,
     menuPassword = '',
     customEntries = [],
-    iconFiles = {}
+    iconFiles = {},
+    customIconTypes = [],
   } = config;
 
   const menuClass = [];
+  const seenMenuClassEntries = new Set();
 
   // Map icon types to file extensions
   const iconMappings = {
@@ -410,12 +455,31 @@ function generateVentoyJson(config) {
     usb: { keys: ['iso'], file: iconFiles.usb }
   };
 
+  customIconTypes.forEach((iconType) => {
+    if (iconType?.id && iconFiles[iconType.id]) {
+      iconMappings[iconType.id] = {
+        keys: [iconType.id.toLowerCase()],
+        file: iconFiles[iconType.id],
+      };
+    }
+  });
+
   Object.entries(iconMappings).forEach(([type, data]) => {
     if (data.file) {
       data.keys.forEach(key => {
-        menuClass.push({ key: key, class: type });
+        addMenuClassEntry(menuClass, seenMenuClassEntries, key, type);
       });
     }
+  });
+
+  customEntries.forEach((entry) => {
+    if (!entry?.icon || !iconFiles[entry.icon]) {
+      return;
+    }
+
+    getCustomEntryKeys(entry).forEach((key) => {
+      addMenuClassEntry(menuClass, seenMenuClassEntries, key, entry.icon);
+    });
   });
 
   // Build menu_alias from custom entries

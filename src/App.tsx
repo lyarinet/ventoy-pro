@@ -56,6 +56,13 @@ interface PreviewMenuItem {
   icon: string;
 }
 
+interface CustomEntry {
+  name: string;
+  path: string;
+  alias: string;
+  icon?: string;
+}
+
 // Font options
 const FONT_OPTIONS = [
   { value: 'Unifont Regular', label: 'Unifont (Default)' },
@@ -281,7 +288,7 @@ type ThemeConfig = {
   menuPassword: string;
   
   // Custom entries
-  customEntries: Array<{ name: string; path: string; alias: string }>;
+  customEntries: CustomEntry[];
   
   // Files
   backgroundFile?: string;
@@ -344,7 +351,14 @@ const STORAGE_KEYS = {
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
   ...DEFAULT_CONFIG,
   ...storedConfig,
-  customEntries: Array.isArray(storedConfig?.customEntries) ? storedConfig.customEntries : [],
+  customEntries: Array.isArray(storedConfig?.customEntries)
+    ? storedConfig.customEntries.map((entry) => ({
+        name: entry?.name ?? '',
+        path: entry?.path ?? '',
+        alias: entry?.alias ?? '',
+        icon: entry?.icon || undefined,
+      }))
+    : [],
   iconFiles: storedConfig?.iconFiles ?? {},
 });
 
@@ -409,7 +423,7 @@ const getPreviewItems = (config: ThemeConfig, customIconTypes: CustomIconType[])
 
     return {
       name: label,
-      icon: inferPreviewIcon(sourceText, customIconTypes, config.iconFiles),
+      icon: entry.icon || inferPreviewIcon(sourceText, customIconTypes, config.iconFiles),
     };
   });
 };
@@ -418,6 +432,8 @@ const getPreviewAnimationClass = (animation: string) => {
   if (animation === 'none') return '';
   return `animate-${animation}`;
 };
+
+const getAllIconTypes = (customIconTypes: CustomIconType[]) => [...ICON_TYPES, ...customIconTypes];
 
 // OS logos as SVG components
 const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode => {
@@ -509,6 +525,7 @@ function App() {
   const [newEntryName, setNewEntryName] = useState('');
   const [newEntryPath, setNewEntryPath] = useState('');
   const [newEntryAlias, setNewEntryAlias] = useState('');
+  const [newEntryIcon, setNewEntryIcon] = useState('auto');
   const [savedConfigs, setSavedConfigs] = useState<SavedConfigRecord[]>([]);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -520,6 +537,8 @@ function App() {
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const isFirstPersistenceRun = useRef(true);
+  const availableIconTypes = getAllIconTypes(customIconTypes);
+  const detectedEntryIcon = inferPreviewIcon(`${newEntryAlias} ${newEntryName} ${newEntryPath}`, customIconTypes, config.iconFiles);
   const previewItems = getPreviewItems(config, customIconTypes);
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
 
@@ -539,6 +558,18 @@ function App() {
       console.error('Last config save error:', error);
     }
   };
+
+  const getResolvedEntryIcon = (entry: CustomEntry) =>
+    entry.icon || inferPreviewIcon(`${entry.alias} ${entry.name} ${entry.path}`, customIconTypes, config.iconFiles);
+
+  const buildApiConfig = () => ({
+    ...config,
+    customIconTypes,
+    customEntries: config.customEntries.map((entry) => ({
+      ...entry,
+      icon: getResolvedEntryIcon(entry),
+    })),
+  });
 
   // Load saved configs from localStorage on mount
   useEffect(() => {
@@ -666,17 +697,42 @@ function App() {
       toast.error('Please enter name and path');
       return;
     }
-    const newEntry = { name: newEntryName, path: newEntryPath, alias: newEntryAlias || newEntryName };
+
+    const newEntry: CustomEntry = {
+      name: newEntryName,
+      path: newEntryPath,
+      alias: newEntryAlias || newEntryName,
+      icon: newEntryIcon === 'auto' ? detectedEntryIcon : newEntryIcon,
+    };
+
     updateConfig('customEntries', [...config.customEntries, newEntry]);
     setNewEntryName('');
     setNewEntryPath('');
     setNewEntryAlias('');
+    setNewEntryIcon('auto');
     toast.success('Custom entry added!');
   };
 
   const removeCustomEntry = (index: number) => {
     const newEntries = config.customEntries.filter((_, i) => i !== index);
     updateConfig('customEntries', newEntries);
+  };
+
+  const updateCustomEntryIcon = (index: number, iconValue: string) => {
+    const nextEntries = config.customEntries.map((entry, entryIndex) => {
+      if (entryIndex !== index) {
+        return entry;
+      }
+
+      return {
+        ...entry,
+        icon: iconValue === 'auto'
+          ? inferPreviewIcon(`${entry.alias} ${entry.name} ${entry.path}`, customIconTypes, config.iconFiles)
+          : iconValue,
+      };
+    });
+
+    updateConfig('customEntries', nextEntries);
   };
 
   const addCustomIconType = () => {
@@ -805,16 +861,17 @@ function App() {
   const generateThemeFiles = async () => {
     setIsGenerating(true);
     try {
+      const apiConfig = buildApiConfig();
       const [themeRes, ventoyRes] = await Promise.all([
         fetch(`${API_URL}/api/generate/theme`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
+          body: JSON.stringify(apiConfig),
         }),
         fetch(`${API_URL}/api/generate/ventoy-json`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
+          body: JSON.stringify(apiConfig),
         }),
       ]);
 
@@ -848,10 +905,11 @@ function App() {
   const downloadThemePackage = async () => {
     setIsDownloading(true);
     try {
+      const apiConfig = buildApiConfig();
       const response = await fetch(`${API_URL}/api/download/theme`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify(apiConfig),
       });
 
       if (response.ok) {
@@ -1428,6 +1486,42 @@ function App() {
                       <Input value={newEntryName} onChange={(e) => setNewEntryName(e.target.value)} placeholder="ISO Name (e.g. Windows 11)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9] text-sm" />
                       <Input value={newEntryPath} onChange={(e) => setNewEntryPath(e.target.value)} placeholder="Path (e.g. /ISO/Win11.iso)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9] text-sm" />
                       <Input value={newEntryAlias} onChange={(e) => setNewEntryAlias(e.target.value)} placeholder="Display Name (optional)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9] text-sm" />
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_150px]">
+                        <div className="flex items-center gap-2 rounded-lg border border-[#30363d] bg-[#0d1117] px-3 py-2">
+                          {config.showIcons && (
+                            iconPreviews[detectedEntryIcon] ? (
+                              <img src={iconPreviews[detectedEntryIcon]} alt={detectedEntryIcon} className="h-4 w-4 object-contain" />
+                            ) : customIconTypes.find((icon) => icon.id === detectedEntryIcon) ? (
+                              <div
+                                className="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
+                                style={{ backgroundColor: customIconTypes.find((icon) => icon.id === detectedEntryIcon)?.color }}
+                              >
+                                {(newEntryAlias || newEntryName || 'C').charAt(0).toUpperCase()}
+                              </div>
+                            ) : (
+                              <div style={{ color: availableIconTypes.find((icon) => icon.id === detectedEntryIcon)?.color }}>
+                                <OSLogo type={detectedEntryIcon} size={16} />
+                              </div>
+                            )
+                          )}
+                          <div className="text-xs">
+                            <p className="text-[#c9d1d9]">Auto detected: <span className="text-[#58a6ff]">{availableIconTypes.find((icon) => icon.id === detectedEntryIcon)?.name ?? 'Generic'}</span></p>
+                            <p className="text-[#6e7681]">You can keep auto or choose an icon manually.</p>
+                          </div>
+                        </div>
+                        <select
+                          value={newEntryIcon}
+                          onChange={(e) => setNewEntryIcon(e.target.value)}
+                          className="w-full rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#c9d1d9]"
+                        >
+                          <option value="auto">Auto Detect</option>
+                          {availableIconTypes.map((icon) => (
+                            <option key={icon.id} value={icon.id}>
+                              {icon.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                       <Button onClick={addCustomEntry} size="sm" className="bg-[#238636] hover:bg-[#2ea043]">
                         <Check className="w-4 h-4 mr-1" /> Add Entry
                       </Button>
@@ -1437,13 +1531,48 @@ function App() {
                       <div className="space-y-2 mt-3">
                         {config.customEntries.map((entry, idx) => (
                           <div key={idx} className="flex items-center justify-between p-2 bg-[#0d1117] rounded-lg border border-[#30363d]">
-                            <div className="text-xs">
-                              <p className="text-[#c9d1d9] font-medium">{entry.alias}</p>
-                              <p className="text-[#6e7681]">{entry.path}</p>
+                            <div className="flex min-w-0 items-center gap-3">
+                              {iconPreviews[getResolvedEntryIcon(entry)] ? (
+                                <img
+                                  src={iconPreviews[getResolvedEntryIcon(entry)]}
+                                  alt={getResolvedEntryIcon(entry)}
+                                  className="h-5 w-5 flex-shrink-0 object-contain"
+                                />
+                              ) : customIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry)) ? (
+                                <div
+                                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                                  style={{ backgroundColor: customIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.color }}
+                                >
+                                  {entry.alias.charAt(0).toUpperCase()}
+                                </div>
+                              ) : (
+                                <div className="flex-shrink-0" style={{ color: availableIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.color }}>
+                                  <OSLogo type={getResolvedEntryIcon(entry)} size={18} />
+                                </div>
+                              )}
+                              <div className="min-w-0 text-xs">
+                                <p className="truncate text-[#c9d1d9] font-medium">{entry.alias}</p>
+                                <p className="truncate text-[#6e7681]">{entry.path}</p>
+                                <p className="text-[#58a6ff]">Icon: {availableIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.name ?? 'Generic'}</p>
+                              </div>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => removeCustomEntry(idx)} className="text-[#f85149] hover:text-[#ff7b72]">
-                              <X className="w-4 h-4" />
-                            </Button>
+                            <div className="ml-3 flex items-center gap-2">
+                              <select
+                                value={getResolvedEntryIcon(entry)}
+                                onChange={(e) => updateCustomEntryIcon(idx, e.target.value)}
+                                className="max-w-[140px] rounded-md border border-[#30363d] bg-[#161b22] px-2 py-1 text-xs text-[#c9d1d9]"
+                              >
+                                <option value="auto">Auto Detect</option>
+                                {availableIconTypes.map((icon) => (
+                                  <option key={icon.id} value={icon.id}>
+                                    {icon.name}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button variant="ghost" size="sm" onClick={() => removeCustomEntry(idx)} className="text-[#f85149] hover:text-[#ff7b72]">
+                                <X className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
