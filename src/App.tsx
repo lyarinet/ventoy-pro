@@ -930,6 +930,14 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     selectedFill: config.selectedItemBoxEffect ? `${config.primaryColor}60` : 'transparent',
     showSelectionMarker: false,
     marker: '>',
+    titleFontFamily: config.titleFont,
+    itemFontFamily: config.itemFont,
+    titleTextShadow: config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined,
+    canvasBoxShadow: config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined,
+    progressFill: `linear-gradient(90deg, ${config.progressFgColor}, ${config.accentColor})`,
+    progressLabelColor: config.normalTextColor,
+    footerText: `Use ↑↓ to select, Enter to boot ${config.passwordProtected ? '• 🔒 Protected' : ''}`,
+    footerColor: config.footerColor,
   };
 
   switch (config.menuStyle) {
@@ -1009,6 +1017,39 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     default:
       return base;
   }
+};
+
+const getBootLikePreviewStyle = (config: ThemeConfig) => {
+  const monospaceFont = 'monospace';
+
+  return {
+    panelBackground: config.menuFrameEffect ? 'rgba(8, 12, 24, 0.94)' : 'transparent',
+    borderWidth: config.menuFrameEffect ? 1 : 0,
+    borderRadius: config.roundedCorners ? 6 : 0,
+    boxShadow: config.menuFrameEffect ? '0 8px 22px rgba(0,0,0,0.32)' : 'none',
+    backdropFilter: undefined,
+    itemPaddingX: 8,
+    itemPaddingY: 5,
+    itemGap: 7,
+    itemBorderRadius: config.selectedItemBoxEffect ? (config.roundedCorners ? 4 : 0) : 0,
+    itemFontScale: 0.66,
+    titleFontScale: 0.54,
+    panelPadding: 10,
+    progressTop: '84%',
+    progressWidth: '60%',
+    terminalHeader: false,
+    selectedFill: config.selectedItemBoxEffect ? `${config.primaryColor}40` : 'transparent',
+    showSelectionMarker: !config.showIcons,
+    marker: '>',
+    titleFontFamily: monospaceFont,
+    itemFontFamily: monospaceFont,
+    titleTextShadow: undefined,
+    canvasBoxShadow: undefined,
+    progressFill: config.progressFgColor,
+    progressLabelColor: '#c9d1d9',
+    footerText: 'Use UP/DOWN to select, ENTER to boot',
+    footerColor: config.footerColor,
+  };
 };
 
 const getAllIconTypes = (customIconTypes: CustomIconType[]) => [...ICON_TYPES, ...customIconTypes];
@@ -1203,6 +1244,7 @@ function App() {
   const [config, setConfig] = useState<ThemeConfig>(DEFAULT_CONFIG);
   const [iconPreviews, setIconPreviews] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState('templates');
+  const [previewMode, setPreviewMode] = useState<'web' | 'boot'>('web');
   const [wizardMode, setWizardMode] = useState(false);
   const [wizardStep, setWizardStep] = useState<(typeof WIZARD_STEPS)[number]['value']>('background');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1249,6 +1291,9 @@ function App() {
   const previewItems = getPreviewItems(config, customIconTypes);
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
   const previewMenuStyle = getPreviewMenuStyle(config);
+  const bootLikePreviewStyle = getBootLikePreviewStyle(config);
+  const activePreviewStyle = previewMode === 'boot' ? bootLikePreviewStyle : previewMenuStyle;
+  const isBootLikePreview = previewMode === 'boot';
   const activeMenuStylePreset = MENU_STYLE_PRESETS.find((preset) => preset.id === config.menuStyle) ?? MENU_STYLE_PRESETS[1];
   const activeTabMeta = TAB_ITEMS.find((item) => item.value === activeTab);
   const activeWizardMeta = WIZARD_STEPS.find((step) => step.value === activeTab || step.value === wizardStep);
@@ -2513,14 +2558,40 @@ function App() {
                         <p className="text-[11px] font-semibold uppercase tracking-[0.26em] text-[#58a6ff]">Live Station</p>
                         <CardTitle className="mt-2 flex items-center gap-2 text-base sm:text-lg text-[#e6edf3]">
                           <Eye className="h-4 w-4 sm:h-5 sm:w-5 text-[#58a6ff]" />
-                          Preview Always Visible
+                          Ventoy Test Mode
                         </CardTitle>
                         <p className="mt-1 text-xs text-[#8b949e]">
-                          Preview left side par sticky hai, is liye settings change karte waqt upar wapas scroll nahi karna padega.
+                          Rich web preview aur simplified boot-like preview ke darmiyan switch karke dekh sakte ho ke real Ventoy screen kitni close hogi.
                         </p>
                       </div>
-                      <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
-                        {config.resolution}
+                      <div className="flex flex-col items-end gap-2">
+                        <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
+                          {config.resolution}
+                        </div>
+                        <div className="inline-flex rounded-full border border-[#30363d] bg-[#0d1117] p-1">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewMode('web')}
+                            className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                              previewMode === 'web'
+                                ? 'bg-[#1f6feb] text-white'
+                                : 'text-[#8b949e] hover:text-white'
+                            }`}
+                          >
+                            Web Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewMode('boot')}
+                            className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
+                              previewMode === 'boot'
+                                ? 'bg-[#238636] text-white'
+                                : 'text-[#8b949e] hover:text-white'
+                            }`}
+                          >
+                            Boot-Like Preview
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </CardHeader>
@@ -2544,24 +2615,25 @@ function App() {
 
                     <div
                       ref={previewCaptureRef}
-                      className={`relative mx-auto overflow-hidden rounded-[26px] border border-[#30363d] shadow-2xl ${previewAnimationClass}`}
+                      className={`relative mx-auto overflow-hidden rounded-[26px] border border-[#30363d] shadow-2xl ${isBootLikePreview ? '' : previewAnimationClass}`}
                       style={{
                         aspectRatio: getAspectRatio(config.resolution),
                         backgroundColor: config.desktopColor,
                         backgroundImage: backgroundPreview ? `url(${backgroundPreview})` : undefined,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
-                        boxShadow: config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined,
+                        boxShadow: isBootLikePreview ? undefined : (config.glowEffect ? `0 0 50px ${config.primaryColor}30` : undefined),
                         animationDuration: `${config.animationSpeed}ms`,
+                        filter: isBootLikePreview ? 'contrast(0.96) saturate(0.86)' : undefined,
                       }}
                     >
                       <div
                         className="absolute top-2 sm:top-4 left-0 right-0 text-center font-bold px-2 sm:px-4 truncate"
                         style={{
                           color: config.headerColor,
-                          fontSize: `${config.titleFontSize * previewMenuStyle.titleFontScale}px`,
-                          fontFamily: config.titleFont,
-                          textShadow: config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined,
+                          fontSize: `${config.titleFontSize * activePreviewStyle.titleFontScale}px`,
+                          fontFamily: isBootLikePreview ? activePreviewStyle.titleFontFamily : config.titleFont,
+                          textShadow: isBootLikePreview ? undefined : (config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined),
                         }}
                       >
                         {config.headerText}
@@ -2575,15 +2647,15 @@ function App() {
                           width: `${config.menuWidth}%`,
                           height: `${config.menuHeight}%`,
                           borderColor: config.menuFrameEffect ? config.primaryColor : 'transparent',
-                          backgroundColor: previewMenuStyle.panelBackground,
-                          borderWidth: `${previewMenuStyle.borderWidth}px`,
+                          backgroundColor: activePreviewStyle.panelBackground,
+                          borderWidth: `${activePreviewStyle.borderWidth}px`,
                           borderStyle: 'solid',
-                          borderRadius: `${previewMenuStyle.borderRadius}px`,
-                          boxShadow: previewMenuStyle.boxShadow,
-                          backdropFilter: previewMenuStyle.backdropFilter,
+                          borderRadius: `${activePreviewStyle.borderRadius}px`,
+                          boxShadow: activePreviewStyle.boxShadow,
+                          backdropFilter: activePreviewStyle.backdropFilter,
                         }}
                       >
-                        {previewMenuStyle.terminalHeader && (
+                        {activePreviewStyle.terminalHeader && (
                           <div
                             className="border-b px-2 py-1 text-[8px] uppercase tracking-[0.22em] sm:text-[9px]"
                             style={{ borderColor: `${config.primaryColor}55`, color: config.primaryColor }}
@@ -2591,24 +2663,24 @@ function App() {
                             boot://ventoy/session
                           </div>
                         )}
-                        <div className="space-y-0.5 sm:space-y-1" style={{ padding: `${previewMenuStyle.panelPadding}px` }}>
+                        <div className="space-y-0.5 sm:space-y-1" style={{ padding: `${activePreviewStyle.panelPadding}px` }}>
                           {previewItems.map((item, i) => (
                             <div
                               key={i}
                               className="flex items-center transition-all"
                               style={{
                                 color: i === 0 ? config.selectedTextColor : config.normalTextColor,
-                                backgroundColor: i === 0 ? previewMenuStyle.selectedFill : 'transparent',
-                                borderRadius: `${previewMenuStyle.itemBorderRadius}px`,
-                                fontSize: `${config.itemFontSize * previewMenuStyle.itemFontScale}px`,
-                                fontFamily: config.itemFont,
-                                gap: `${previewMenuStyle.itemGap}px`,
-                                padding: `${previewMenuStyle.itemPaddingY}px ${previewMenuStyle.itemPaddingX}px`,
+                                backgroundColor: i === 0 ? activePreviewStyle.selectedFill : 'transparent',
+                                borderRadius: `${activePreviewStyle.itemBorderRadius}px`,
+                                fontSize: `${config.itemFontSize * activePreviewStyle.itemFontScale}px`,
+                                fontFamily: isBootLikePreview ? activePreviewStyle.itemFontFamily : config.itemFont,
+                                gap: `${activePreviewStyle.itemGap}px`,
+                                padding: `${activePreviewStyle.itemPaddingY}px ${activePreviewStyle.itemPaddingX}px`,
                               }}
                             >
-                              {previewMenuStyle.showSelectionMarker && (
+                              {activePreviewStyle.showSelectionMarker && (
                                 <span style={{ color: i === 0 ? config.primaryColor : `${config.normalTextColor}99` }}>
-                                  {i === 0 ? previewMenuStyle.marker : '·'}
+                                  {i === 0 ? activePreviewStyle.marker : '·'}
                                 </span>
                               )}
                               {config.showIcons && (
@@ -2638,8 +2710,8 @@ function App() {
                           <div
                             className="absolute left-1/2 -translate-x-1/2 h-2 sm:h-4 rounded-full overflow-hidden border"
                             style={{
-                              top: previewMenuStyle.progressTop,
-                              width: previewMenuStyle.progressWidth,
+                              top: activePreviewStyle.progressTop,
+                              width: activePreviewStyle.progressWidth,
                               backgroundColor: config.progressBgColor,
                               borderColor: config.primaryColor,
                               borderRadius: config.roundedCorners ? '999px' : '0px',
@@ -2649,8 +2721,10 @@ function App() {
                               className="h-full transition-all duration-500"
                               style={{
                                 width: '60%',
-                                background: `linear-gradient(90deg, ${config.progressFgColor}, ${config.accentColor})`,
-                                boxShadow: config.glowEffect ? `0 0 10px ${config.progressFgColor}` : undefined,
+                                background: isBootLikePreview
+                                  ? activePreviewStyle.progressFill
+                                  : `linear-gradient(90deg, ${config.progressFgColor}, ${config.accentColor})`,
+                                boxShadow: isBootLikePreview ? undefined : (config.glowEffect ? `0 0 10px ${config.progressFgColor}` : undefined),
                               }}
                             />
                           </div>
@@ -2660,7 +2734,8 @@ function App() {
                               top: '86%',
                               left: '50%',
                               transform: 'translateX(-50%)',
-                              color: config.normalTextColor,
+                              color: isBootLikePreview ? activePreviewStyle.progressLabelColor : config.normalTextColor,
+                              fontFamily: isBootLikePreview ? activePreviewStyle.itemFontFamily : undefined,
                             }}
                           >
                             Booting in {config.timeout}s
@@ -2671,9 +2746,9 @@ function App() {
                       {config.showFooter && (
                         <div
                           className="absolute bottom-1 sm:bottom-2 left-0 right-0 text-center text-[8px] sm:text-[10px]"
-                          style={{ color: config.footerColor }}
+                          style={{ color: isBootLikePreview ? activePreviewStyle.footerColor : config.footerColor, fontFamily: isBootLikePreview ? activePreviewStyle.itemFontFamily : undefined }}
                         >
-                          Use ↑↓ to select, Enter to boot {config.passwordProtected && '• 🔒 Protected'}
+                          {isBootLikePreview ? activePreviewStyle.footerText : `Use ↑↓ to select, Enter to boot ${config.passwordProtected ? '• 🔒 Protected' : ''}`}
                         </div>
                       )}
                     </div>
