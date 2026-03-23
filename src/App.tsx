@@ -385,28 +385,28 @@ const BUILT_IN_BACKGROUNDS: BuiltInBackground[] = [
     id: 'neon-waves',
     name: 'Neon Waves',
     summary: 'Electric cyan ribbons with a deep violet stage.',
-    filename: 'neon-waves.svg',
+    filename: 'neon-waves.png',
     accent: '#38bdf8',
   },
   {
     id: 'cyan-grid',
     name: 'Cyan Grid',
     summary: 'Clean targeting frame with a centered glow.',
-    filename: 'cyan-grid.svg',
+    filename: 'cyan-grid.png',
     accent: '#22d3ee',
   },
   {
     id: 'star-grid',
     name: 'Star Grid',
     summary: 'Boot-ready starfield layered over a blueprint grid.',
-    filename: 'star-grid.svg',
+    filename: 'star-grid.png',
     accent: '#60a5fa',
   },
   {
     id: 'tech-frame',
     name: 'Tech Frame',
     summary: 'Polished metallic panel with neon edge lighting.',
-    filename: 'tech-frame.svg',
+    filename: 'tech-frame.png',
     accent: '#a78bfa',
   },
 ];
@@ -760,10 +760,21 @@ const STORAGE_KEYS = {
 const getSavedConfigsStorageKey = (user?: AuthUser | null) =>
   `${STORAGE_KEYS.savedConfigs}:${user?.id ?? 'guest'}`;
 
+const getBuiltInBackgroundFilename = (filename?: string) => {
+  if (!filename) {
+    return filename;
+  }
+
+  return filename.endsWith('.svg') ? filename.replace(/\.svg$/i, '.png') : filename;
+};
+
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
   ...DEFAULT_CONFIG,
   ...storedConfig,
   backgroundSource: storedConfig?.backgroundSource === 'builtin' ? 'builtin' : 'upload',
+  backgroundFile: storedConfig?.backgroundSource === 'builtin'
+    ? getBuiltInBackgroundFilename(storedConfig?.backgroundFile)
+    : storedConfig?.backgroundFile,
   menuStyle: MENU_STYLE_PRESETS.some((preset) => preset.id === storedConfig?.menuStyle)
     ? (storedConfig?.menuStyle as ThemeConfig['menuStyle'])
     : DEFAULT_CONFIG.menuStyle,
@@ -787,7 +798,7 @@ const buildBackgroundPreviewUrl = (
   }
 
   return source === 'builtin'
-    ? `/backgrounds/${filename}`
+    ? `/backgrounds/${getBuiltInBackgroundFilename(filename)}`
     : `${API_URL}/uploads/backgrounds/${filename}`;
 };
 
