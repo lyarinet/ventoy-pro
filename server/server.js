@@ -4,6 +4,7 @@ import archiver from 'archiver';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -14,7 +15,8 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Serve static files from dist directory
@@ -33,6 +35,17 @@ app.get('/', (req, res) => {
       message: 'Ventoy Theme Generator Pro API',
       endpoints: {
         'GET /': 'This info',
+        'POST /api/auth/register': 'Create a user account',
+        'POST /api/auth/login': 'Login and create session',
+        'GET /api/auth/session': 'Get current logged-in user',
+        'POST /api/auth/logout': 'Logout current session',
+        'PUT /api/auth/password': 'Change current user password',
+        'GET /api/settings': 'Get global branding settings',
+        'PUT /api/settings': 'Update global branding settings (admin only)',
+        'POST /api/settings/logo': 'Upload and save global logo (admin only)',
+        'GET /api/themes': 'List all shared themes',
+        'POST /api/themes': 'Share a theme (login required)',
+        'DELETE /api/themes/:id': 'Delete a shared theme (owner or admin)',
         'POST /api/upload/background': 'Upload background image',
         'POST /api/upload/icon/:type': 'Upload icon',
         'POST /api/generate/theme': 'Generate theme.txt',
@@ -48,20 +61,185 @@ app.get('/', (req, res) => {
 const uploadsDir = path.join(__dirname, 'uploads');
 const backgroundsDir = path.join(uploadsDir, 'backgrounds');
 const iconsDir = path.join(uploadsDir, 'icons');
+const brandingDir = path.join(uploadsDir, 'branding');
 const outputDir = path.join(__dirname, 'output');
 const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
+const dataDir = path.join(__dirname, 'data');
+const usersFile = path.join(dataDir, 'users.json');
+const themesFile = path.join(dataDir, 'themes.json');
+const sessionsFile = path.join(dataDir, 'sessions.json');
+const settingsFile = path.join(dataDir, 'settings.json');
 
-[uploadsDir, backgroundsDir, iconsDir, outputDir].forEach(dir => {
+[uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 });
+
+const DEFAULT_SETTINGS = {
+  siteTitle: 'Ventoy Pro',
+  siteSubtitle: 'Advanced Theme Generator',
+  logoUrl: '',
+  logoText: 'VP',
+};
+
+function ensureJsonFile(filePath, fallbackValue) {
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify(fallbackValue, null, 2));
+  }
+}
+
+function readJsonFile(filePath, fallbackValue) {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return fallbackValue;
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return raw ? JSON.parse(raw) : fallbackValue;
+  } catch (error) {
+    console.error(`Failed to read ${filePath}:`, error);
+    return fallbackValue;
+  }
+}
+
+function writeJsonFile(filePath, value) {
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return { salt, hash };
+}
+
+function verifyPassword(password, salt, hash) {
+  const hashed = crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(hashed, 'hex'), Buffer.from(hash, 'hex'));
+}
+
+function sanitizeUser(user) {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    createdAt: user.createdAt,
+  };
+}
+
+function getUsers() {
+  return readJsonFile(usersFile, []);
+}
+
+function saveUsers(users) {
+  writeJsonFile(usersFile, users);
+}
+
+function getThemes() {
+  return readJsonFile(themesFile, []);
+}
+
+function saveThemes(themes) {
+  writeJsonFile(themesFile, themes);
+}
+
+function getSessions() {
+  return readJsonFile(sessionsFile, []);
+}
+
+function saveSessions(sessions) {
+  writeJsonFile(sessionsFile, sessions);
+}
+
+function getSettings() {
+  return readJsonFile(settingsFile, DEFAULT_SETTINGS);
+}
+
+function saveSettings(settings) {
+  writeJsonFile(settingsFile, settings);
+}
+
+function createSession(userId) {
+  const sessions = getSessions();
+  const token = crypto.randomBytes(24).toString('hex');
+  const session = {
+    token,
+    userId,
+    createdAt: new Date().toISOString(),
+  };
+  sessions.push(session);
+  saveSessions(sessions);
+  return token;
+}
+
+function getAuthenticatedUser(req) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token) {
+    return null;
+  }
+
+  const sessions = getSessions();
+  const session = sessions.find((entry) => entry.token === token);
+  if (!session) {
+    return null;
+  }
+
+  const users = getUsers();
+  const user = users.find((entry) => entry.id === session.userId);
+  if (!user) {
+    return null;
+  }
+
+  return { token, user };
+}
+
+function requireAuth(req, res, next) {
+  const auth = getAuthenticatedUser(req);
+  if (!auth) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
+
+  req.authToken = auth.token;
+  req.user = sanitizeUser(auth.user);
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Admin access required' });
+  }
+  next();
+}
+
+ensureJsonFile(usersFile, []);
+ensureJsonFile(themesFile, []);
+ensureJsonFile(sessionsFile, []);
+ensureJsonFile(settingsFile, DEFAULT_SETTINGS);
+
+if (getUsers().length === 0) {
+  const adminPassword = hashPassword('admin123');
+  saveUsers([
+    {
+      id: 'user_admin',
+      username: 'admin',
+      role: 'admin',
+      passwordSalt: adminPassword.salt,
+      passwordHash: adminPassword.hash,
+      createdAt: new Date().toISOString(),
+    },
+  ]);
+}
 
 // Multer storage configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     if (file.fieldname === 'background') {
       cb(null, backgroundsDir);
+    } else if (file.fieldname === 'logo') {
+      cb(null, brandingDir);
     } else {
       cb(null, iconsDir);
     }
@@ -94,6 +272,224 @@ const uploadedFiles = {
 };
 
 // ==================== API ROUTES ====================
+
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const username = String(req.body?.username || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+
+    if (username.length < 3 || password.length < 4) {
+      return res.status(400).json({ success: false, error: 'Username or password is too short' });
+    }
+
+    const users = getUsers();
+    if (users.some((user) => user.username === username)) {
+      return res.status(400).json({ success: false, error: 'Username already exists' });
+    }
+
+    const passwordData = hashPassword(password);
+    const newUser = {
+      id: `user_${crypto.randomUUID()}`,
+      username,
+      role: 'user',
+      passwordSalt: passwordData.salt,
+      passwordHash: passwordData.hash,
+      createdAt: new Date().toISOString(),
+    };
+
+    users.push(newUser);
+    saveUsers(users);
+
+    const token = createSession(newUser.id);
+    res.json({ success: true, token, user: sanitizeUser(newUser) });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const username = String(req.body?.username || '').trim().toLowerCase();
+    const password = String(req.body?.password || '');
+    const users = getUsers();
+    const user = users.find((entry) => entry.username === username);
+
+    if (!user || !verifyPassword(password, user.passwordSalt, user.passwordHash)) {
+      return res.status(401).json({ success: false, error: 'Invalid username or password' });
+    }
+
+    const token = createSession(user.id);
+    res.json({ success: true, token, user: sanitizeUser(user) });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/auth/session', requireAuth, (req, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  const sessions = getSessions().filter((session) => session.token !== req.authToken);
+  saveSessions(sessions);
+  res.json({ success: true });
+});
+
+app.put('/api/auth/password', requireAuth, (req, res) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, error: 'Current and new password are required' });
+    }
+
+    if (newPassword.length < 4) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 4 characters long' });
+    }
+
+    const users = getUsers();
+    const userIndex = users.findIndex((entry) => entry.id === req.user.id);
+    if (userIndex === -1) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const storedUser = users[userIndex];
+    if (!verifyPassword(currentPassword, storedUser.passwordSalt, storedUser.passwordHash)) {
+      return res.status(401).json({ success: false, error: 'Current password is incorrect' });
+    }
+
+    const passwordData = hashPassword(newPassword);
+    users[userIndex] = {
+      ...storedUser,
+      passwordSalt: passwordData.salt,
+      passwordHash: passwordData.hash,
+    };
+    saveUsers(users);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/settings', (req, res) => {
+  res.json({ success: true, settings: getSettings() });
+});
+
+app.put('/api/settings', requireAuth, requireAdmin, (req, res) => {
+  try {
+    const nextSettings = {
+      siteTitle: String(req.body?.siteTitle || DEFAULT_SETTINGS.siteTitle).trim() || DEFAULT_SETTINGS.siteTitle,
+      siteSubtitle: String(req.body?.siteSubtitle || DEFAULT_SETTINGS.siteSubtitle).trim() || DEFAULT_SETTINGS.siteSubtitle,
+      logoUrl: String(req.body?.logoUrl || '').trim(),
+      logoText: String(req.body?.logoText || DEFAULT_SETTINGS.logoText).trim().slice(0, 4) || DEFAULT_SETTINGS.logoText,
+    };
+
+    saveSettings(nextSettings);
+    res.json({ success: true, settings: nextSettings });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/settings/logo', requireAuth, requireAdmin, upload.single('logo'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No logo file uploaded' });
+    }
+
+    const nextSettings = {
+      ...getSettings(),
+      logoUrl: `/uploads/branding/${req.file.filename}`,
+    };
+
+    saveSettings(nextSettings);
+    res.json({
+      success: true,
+      settings: nextSettings,
+      logoUrl: nextSettings.logoUrl,
+      filename: req.file.filename,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/themes', (req, res) => {
+  const themes = getThemes()
+    .slice()
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json({ success: true, themes });
+});
+
+app.post('/api/themes', requireAuth, (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const previewImage = String(req.body?.previewImage || '').trim();
+    const config = req.body?.config;
+    const customIconTypes = Array.isArray(req.body?.customIconTypes) ? req.body.customIconTypes : [];
+
+    if (!name || !previewImage || !config) {
+      return res.status(400).json({ success: false, error: 'Theme name, preview image, and config are required' });
+    }
+
+    const themes = getThemes();
+    const now = Date.now();
+    const oneDayAgo = now - (24 * 60 * 60 * 1000);
+    const ownedThemes = themes.filter((theme) => theme.ownerId === req.user.id);
+    const sharedToday = ownedThemes.filter((theme) => new Date(theme.createdAt).getTime() >= oneDayAgo);
+
+    if (req.user.role !== 'admin') {
+      if (ownedThemes.length >= 2) {
+        return res.status(400).json({ success: false, error: 'Delete one of your existing themes before sharing a new one' });
+      }
+
+      if (sharedToday.length >= 2) {
+        return res.status(400).json({ success: false, error: 'You can share a maximum of two themes per day' });
+      }
+    }
+
+    const record = {
+      id: `theme_${crypto.randomUUID()}`,
+      name,
+      previewImage,
+      config,
+      customIconTypes,
+      createdAt: new Date().toISOString(),
+      ownerId: req.user.id,
+      ownerName: req.user.username,
+    };
+
+    themes.push(record);
+    saveThemes(themes);
+    res.json({ success: true, theme: record });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/themes/:id', requireAuth, (req, res) => {
+  try {
+    const themeId = req.params.id;
+    const themes = getThemes();
+    const theme = themes.find((entry) => entry.id === themeId);
+
+    if (!theme) {
+      return res.status(404).json({ success: false, error: 'Theme not found' });
+    }
+
+    const canDelete = req.user.role === 'admin' || theme.ownerId === req.user.id;
+    if (!canDelete) {
+      return res.status(403).json({ success: false, error: 'You can delete only your own themes' });
+    }
+
+    saveThemes(themes.filter((entry) => entry.id !== themeId));
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Upload background image
 app.post('/api/upload/background', upload.single('background'), (req, res) => {
@@ -641,6 +1037,25 @@ To modify this theme, use Ventoy Theme Generator Pro:
 *Need help? Check the online documentation.*
 `;
 }
+
+app.use((error, req, res, next) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({
+      success: false,
+      error: 'Payload too large. Try sharing a smaller preview image.',
+    });
+  }
+
+  if (error) {
+    console.error('Server error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Internal server error',
+    });
+  }
+
+  next();
+});
 
 // Start server
 app.listen(PORT, () => {

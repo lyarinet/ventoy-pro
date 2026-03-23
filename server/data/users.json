@@ -1,0 +1,26 @@
+[
+  {
+    "id": "user_admin",
+    "username": "admin",
+    "role": "admin",
+    "passwordSalt": "164f54c04be4cbfd4dcce950c94e7651",
+    "passwordHash": "51da4fb58c2457fe05f1f8ff1df926a4145b1e0733436c888189a5b7ae4d7ac1ae3d252839885845b061a484b5d257f2b04732a99334ab3cd9f55734b9877c4e",
+    "createdAt": "2026-03-23T08:03:44.421Z"
+  },
+  {
+    "id": "user_bf5b9414-887f-44ac-a7d5-bc318db5e97d",
+    "username": "test",
+    "role": "user",
+    "passwordSalt": "6f551dff50777bde13b5ae063a3b07e5",
+    "passwordHash": "b449cc486b792795d1bbddd506f55544fd7deab9ea241c2acfdd8e88ffdc6d8dd7b859527d661d0973ba89ed5772c289f6f34d4a3334ab0bd6143ecba658eb38",
+    "createdAt": "2026-03-23T08:06:04.156Z"
+  },
+  {
+    "id": "user_2bd33266-1b5f-4367-8b92-ab6bc17dd12a",
+    "username": "test2",
+    "role": "user",
+    "passwordSalt": "fa31a982715cc2c59a9e45e1114bc5df",
+    "passwordHash": "0bf0944c026cd1c654a429403273f19e65f9a4ab45d8dab79096d0a671914fcaef4dae7524f44819f4484e81e49fd62046bdda56743228d0abbcf5e92aefb27f",
+    "createdAt": "2026-03-23T08:20:31.495Z"
+  }
+]

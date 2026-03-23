@@ -16,11 +16,27 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
-import { toPng } from 'html-to-image';
+import { toJpeg, toPng } from 'html-to-image';
 import './App.css';
 
 // API base URL
 const API_URL = 'http://localhost:3001';
+
+const resolveServerAssetUrl = (assetUrl: string) => {
+  if (!assetUrl) {
+    return '';
+  }
+
+  if (assetUrl.startsWith('http://') || assetUrl.startsWith('https://') || assetUrl.startsWith('data:')) {
+    return assetUrl;
+  }
+
+  if (assetUrl.startsWith('/')) {
+    return `${API_URL}${assetUrl}`;
+  }
+
+  return assetUrl;
+};
 
 // Icon types
 const ICON_TYPES = [
@@ -59,7 +75,30 @@ interface MarketplaceThemeRecord {
   config: ThemeConfig;
   customIconTypes: CustomIconType[];
   createdAt: string;
+  ownerId: string;
+  ownerName: string;
 }
+
+interface AuthUser {
+  id: string;
+  username: string;
+  role: 'admin' | 'user';
+  createdAt?: string;
+}
+
+interface GlobalSettings {
+  siteTitle: string;
+  siteSubtitle: string;
+  logoUrl: string;
+  logoText: string;
+}
+
+const normalizeGlobalSettings = (settings?: Partial<GlobalSettings>): GlobalSettings => ({
+  siteTitle: settings?.siteTitle || 'Ventoy Pro',
+  siteSubtitle: settings?.siteSubtitle || 'Advanced Theme Generator',
+  logoUrl: resolveServerAssetUrl(settings?.logoUrl || ''),
+  logoText: settings?.logoText || 'VP',
+});
 
 interface PreviewMenuItem {
   name: string;
@@ -702,6 +741,7 @@ const STORAGE_KEYS = {
   currentCustomIconTypes: 'ventoyCurrentCustomIconTypes',
   lastConfig: 'ventoyLastConfig',
   marketplaceThemes: 'ventoyMarketplaceThemes',
+  authToken: 'ventoyAuthToken',
 };
 
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
@@ -958,6 +998,45 @@ const renderElementToPngDataUrl = async (element: HTMLElement) => {
   }
 };
 
+const renderElementToMarketplaceImageDataUrl = async (element: HTMLElement) => {
+  await waitForRenderedAssets(element);
+
+  try {
+    return await toJpeg(element, {
+      cacheBust: true,
+      pixelRatio: 1,
+      quality: 0.82,
+      backgroundColor: '#0d1117',
+      includeQueryParams: true,
+    });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && error.message
+        ? `Preview image could not be rendered: ${error.message}`
+        : 'Preview image could not be rendered.'
+    );
+  }
+};
+
+const parseApiResponse = async <T,>(response: Response): Promise<T> => {
+  const raw = await response.text();
+
+  if (!raw) {
+    return {} as T;
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const cleaned = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (response.status === 413) {
+      throw new Error('Payload too large. Try sharing a smaller preview image.');
+    }
+
+    throw new Error(cleaned.slice(0, 180) || `Request failed with status ${response.status}`);
+  }
+};
+
 const exportElementAsPng = async (element: HTMLElement, filename: string) => {
   const pngUrl = await renderElementToPngDataUrl(element);
   const link = document.createElement('a');
@@ -1065,6 +1144,21 @@ function App() {
   const [marketplacePage, setMarketplacePage] = useState(1);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showAuthDialog, setShowAuthDialog] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(normalizeGlobalSettings());
+  const [settingsForm, setSettingsForm] = useState<GlobalSettings>(normalizeGlobalSettings());
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false);
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
   const [customIconTypes, setCustomIconTypes] = useState<CustomIconType[]>([]);
   const [newCustomIconId, setNewCustomIconId] = useState('');
   const [newCustomIconName, setNewCustomIconName] = useState('');
@@ -1072,6 +1166,7 @@ function App() {
   
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const previewCaptureRef = useRef<HTMLDivElement>(null);
   const isFirstPersistenceRun = useRef(true);
   const availableIconTypes = getAllIconTypes(customIconTypes);
@@ -1106,6 +1201,66 @@ function App() {
     } catch (error) {
       console.error('Last config save error:', error);
     }
+  };
+
+  const getAuthHeaders = (token?: string) => ({
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  });
+
+  const fetchMarketplaceThemes = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/themes`);
+      const data = await parseApiResponse<{ success?: boolean; themes?: MarketplaceThemeRecord[] }>(response);
+      if (data.success && Array.isArray(data.themes)) {
+        setMarketplaceThemes(
+          data.themes.map((theme: MarketplaceThemeRecord) => ({
+            ...theme,
+            config: normalizeConfig(theme.config),
+            customIconTypes: Array.isArray(theme.customIconTypes) ? theme.customIconTypes : [],
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('Theme fetch error:', error);
+    }
+  };
+
+  const fetchGlobalSettings = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/settings`);
+      const data = await parseApiResponse<{ success?: boolean; settings?: GlobalSettings }>(response);
+      if (data.success && data.settings) {
+        const nextSettings = normalizeGlobalSettings(data.settings);
+        setGlobalSettings(nextSettings);
+        setSettingsForm(nextSettings);
+      }
+    } catch (error) {
+      console.error('Settings fetch error:', error);
+    }
+  };
+
+  const restoreAuthSession = async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+    if (!token) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/session`, {
+        headers: getAuthHeaders(token),
+      });
+      const data = await parseApiResponse<{ success?: boolean; user?: AuthUser }>(response);
+      if (data.success && data.user) {
+        setAuthUser(data.user);
+        return;
+      }
+    } catch (error) {
+      console.error('Session restore error:', error);
+    }
+
+    localStorage.removeItem(STORAGE_KEYS.authToken);
+    setAuthUser(null);
   };
 
   const getResolvedEntryIcon = (entry: CustomEntry) =>
@@ -1145,20 +1300,6 @@ function App() {
 
       setSavedConfigs(nextSavedConfigs);
 
-      const marketplaceThemesStr = localStorage.getItem(STORAGE_KEYS.marketplaceThemes);
-      const parsedMarketplaceThemes = marketplaceThemesStr ? JSON.parse(marketplaceThemesStr) : [];
-      const nextMarketplaceThemes = Array.isArray(parsedMarketplaceThemes)
-        ? parsedMarketplaceThemes
-            .filter((item): item is MarketplaceThemeRecord => Boolean(item?.id && item?.name && item?.config && item?.previewImage))
-            .map((item) => ({
-              ...item,
-              config: normalizeConfig(item.config),
-              customIconTypes: Array.isArray(item.customIconTypes) ? item.customIconTypes : [],
-            }))
-        : [];
-
-      setMarketplaceThemes(nextMarketplaceThemes);
-
       const currentConfigStr = localStorage.getItem(STORAGE_KEYS.currentConfig);
       const currentCustomIconTypesStr = localStorage.getItem(STORAGE_KEYS.currentCustomIconTypes);
       const lastConfigStr = localStorage.getItem(STORAGE_KEYS.lastConfig);
@@ -1197,6 +1338,12 @@ function App() {
       setMarketplacePage(totalMarketplacePages);
     }
   }, [marketplacePage, totalMarketplacePages]);
+
+  useEffect(() => {
+    fetchMarketplaceThemes();
+    fetchGlobalSettings();
+    restoreAuthSession();
+  }, []);
 
   useEffect(() => {
     if (wizardMode && activeTab !== wizardStep) {
@@ -1283,7 +1430,7 @@ function App() {
         method: 'POST',
         body: formData,
       });
-      const data = await response.json();
+      const data = await parseApiResponse<{ success?: boolean; filename?: string }>(response);
       if (data.success) {
         setConfig((prev) => ({
           ...prev,
@@ -1311,15 +1458,16 @@ function App() {
         method: 'POST',
         body: formData,
       });
-      const data = await response.json();
-      if (data.success) {
+      const data = await parseApiResponse<{ success?: boolean; filename?: string }>(response);
+      if (data.success && data.filename) {
+        const uploadedFilename = data.filename;
         setConfig((prev) => ({
           ...prev,
-          iconFiles: { ...(prev.iconFiles ?? {}), [type]: data.filename },
+          iconFiles: { ...(prev.iconFiles ?? {}), [type]: uploadedFilename },
         }));
         setIconPreviews((prev) => ({
           ...prev,
-          [type]: `${API_URL}/uploads/icons/${data.filename}`,
+          [type]: `${API_URL}/uploads/icons/${uploadedFilename}`,
         }));
         toast.success(`${type} icon uploaded!`);
       }
@@ -1500,6 +1648,211 @@ function App() {
     toast.success(`Exported ${saved.name}`);
   };
 
+  const handleAuthSubmit = async () => {
+    const username = authUsername.trim().toLowerCase();
+    const password = authPassword;
+
+    if (!username || !password) {
+      toast.error('Enter username and password');
+      return;
+    }
+
+    setIsAuthLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/${authMode}`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await parseApiResponse<{ success?: boolean; token?: string; user?: AuthUser; error?: string }>(response);
+
+      if (!data.success) {
+        toast.error(data.error || 'Authentication failed');
+        return;
+      }
+
+      if (!data.token || !data.user) {
+        toast.error('Authentication response was incomplete');
+        return;
+      }
+
+      localStorage.setItem(STORAGE_KEYS.authToken, data.token);
+      setAuthUser(data.user);
+      setAuthUsername('');
+      setAuthPassword('');
+      setShowAuthDialog(false);
+      toast.success(authMode === 'login' ? 'Logged in successfully' : 'Account created successfully');
+    } catch (error) {
+      toast.error('Could not complete authentication');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+    try {
+      if (token) {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: getAuthHeaders(token),
+        });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem(STORAGE_KEYS.authToken);
+      setAuthUser(null);
+      toast.success('Logged out');
+    }
+  };
+
+  const saveGlobalSettings = async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+    if (!token || authUser?.role !== 'admin') {
+      toast.error('Admin login required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/settings`, {
+        method: 'PUT',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify(settingsForm),
+      });
+      const data = await parseApiResponse<{ success?: boolean; settings?: GlobalSettings; error?: string }>(response);
+      if (!data.success) {
+        toast.error(data.error || 'Could not save settings');
+        return;
+      }
+
+      const nextSettings = normalizeGlobalSettings(data.settings);
+      setGlobalSettings(nextSettings);
+      setSettingsForm(nextSettings);
+      setShowSettingsDialog(false);
+      toast.success('Global settings updated');
+    } catch (error) {
+      toast.error('Could not save settings');
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+
+    if (!file) {
+      return;
+    }
+
+    if (!token || authUser?.role !== 'admin') {
+      toast.error('Admin login required');
+      e.target.value = '';
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('logo', file);
+    setIsLogoUploading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/settings/logo`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      const data = await parseApiResponse<{ success?: boolean; settings?: GlobalSettings; error?: string }>(response);
+
+      if (!data.success || !data.settings) {
+        toast.error(data.error || 'Could not upload logo');
+        return;
+      }
+
+      const nextSettings = normalizeGlobalSettings(data.settings);
+      setGlobalSettings(nextSettings);
+      setSettingsForm(nextSettings);
+      toast.success('Logo uploaded successfully');
+    } catch (error) {
+      toast.error('Could not upload logo');
+    } finally {
+      setIsLogoUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handlePasswordChange = async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+
+    if (!token || !authUser) {
+      toast.error('Login required');
+      return;
+    }
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      toast.error('Fill all password fields');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    setIsPasswordLoading(true);
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/password`, {
+        method: 'PUT',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+        }),
+      });
+      const data = await parseApiResponse<{ success?: boolean; error?: string }>(response);
+
+      if (!data.success) {
+        toast.error(data.error || 'Could not change password');
+        return;
+      }
+
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setShowPasswordDialog(false);
+      toast.success('Password updated successfully');
+    } catch (error) {
+      toast.error('Could not change password');
+    } finally {
+      setIsPasswordLoading(false);
+    }
+  };
+
+  const deleteSharedTheme = async (themeId: string) => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+    if (!token) {
+      toast.error('Login required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/themes/${themeId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(token),
+      });
+      const data = await parseApiResponse<{ success?: boolean; error?: string }>(response);
+      if (!data.success) {
+        toast.error(data.error || 'Could not delete theme');
+        return;
+      }
+
+      toast.success('Theme deleted');
+      fetchMarketplaceThemes();
+    } catch (error) {
+      toast.error('Could not delete theme');
+    }
+  };
+
   const applyMarketplaceTheme = (theme: MarketplaceThemeRecord) => {
     const nextConfig = normalizeConfig(theme.config);
     setConfig(nextConfig);
@@ -1519,6 +1872,14 @@ function App() {
   };
 
   const shareCurrentThemeToMarketplace = async () => {
+    const token = localStorage.getItem(STORAGE_KEYS.authToken);
+    if (!token || !authUser) {
+      setAuthMode('login');
+      setShowAuthDialog(true);
+      toast.error('Login required to share a theme');
+      return;
+    }
+
     if (!previewCaptureRef.current) {
       toast.error('Preview is not ready yet.');
       return;
@@ -1527,21 +1888,27 @@ function App() {
     setIsCapturing(true);
 
     try {
-      const previewImage = await renderElementToPngDataUrl(previewCaptureRef.current);
-      const record: MarketplaceThemeRecord = {
-        id: `${Date.now()}`,
-        name: config.headerText.trim() || `Theme ${marketplaceThemes.length + 1}`,
-        previewImage,
-        config: normalizeConfig(config),
-        customIconTypes,
-        createdAt: new Date().toISOString(),
-      };
+      const previewImage = await renderElementToMarketplaceImageDataUrl(previewCaptureRef.current);
+      const response = await fetch(`${API_URL}/api/themes`, {
+        method: 'POST',
+        headers: getAuthHeaders(token),
+        body: JSON.stringify({
+          name: config.headerText.trim() || `Theme ${marketplaceThemes.length + 1}`,
+          previewImage,
+          config: normalizeConfig(config),
+          customIconTypes,
+        }),
+      });
+      const data = await parseApiResponse<{ success?: boolean; error?: string }>(response);
 
-      const nextMarketplaceThemes = [record, ...marketplaceThemes].slice(0, 24);
-      setMarketplaceThemes(nextMarketplaceThemes);
+      if (!data.success) {
+        toast.error(data.error || 'Could not share theme.');
+        return;
+      }
+
+      await fetchMarketplaceThemes();
       setMarketplacePage(1);
       setActiveTab('marketplace');
-      localStorage.setItem(STORAGE_KEYS.marketplaceThemes, JSON.stringify(nextMarketplaceThemes));
       toast.success('Theme shared to marketplace!');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not share theme.');
@@ -1594,10 +1961,10 @@ function App() {
         }),
       ]);
 
-      const themeData = await themeRes.json();
-      const ventoyData = await ventoyRes.json();
+      const themeData = await parseApiResponse<{ success?: boolean; content?: string }>(themeRes);
+      const ventoyData = await parseApiResponse<{ success?: boolean; content?: unknown }>(ventoyRes);
 
-      if (themeData.success && ventoyData.success) {
+      if (themeData.success && ventoyData.success && typeof themeData.content === 'string') {
         const themeBlob = new Blob([themeData.content], { type: 'text/plain' });
         const themeUrl = URL.createObjectURL(themeBlob);
         const themeLink = document.createElement('a');
@@ -1686,14 +2053,18 @@ function App() {
       <header className="border-b border-[#30363d] bg-[#010409]/90 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-[#58a6ff] via-[#1f6feb] to-[#238636] flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-gradient-to-br from-[#58a6ff] via-[#1f6feb] to-[#238636] flex items-center justify-center shadow-lg shadow-blue-500/20 overflow-hidden">
+              {globalSettings.logoUrl ? (
+                <img src={globalSettings.logoUrl} alt={globalSettings.siteTitle} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-sm sm:text-base font-bold text-white">{globalSettings.logoText || 'VP'}</span>
+              )}
             </div>
             <div>
               <h1 className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-[#58a6ff] via-[#a371f7] to-[#238636] bg-clip-text text-transparent">
-                Ventoy Pro
+                {globalSettings.siteTitle}
               </h1>
-              <p className="text-[10px] sm:text-xs text-[#8b949e] hidden sm:block">Advanced Theme Generator</p>
+              <p className="text-[10px] sm:text-xs text-[#8b949e] hidden sm:block">{globalSettings.siteSubtitle}</p>
             </div>
           </div>
           
@@ -1742,6 +2113,117 @@ function App() {
               <RefreshCw className="w-4 h-4 mr-1" />
               Reset
             </Button>
+
+            {authUser?.role === 'admin' && (
+              <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9]">
+                    <Settings2 className="w-4 h-4 mr-1" />
+                    Settings
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-[#161b22] border-[#30363d]">
+                  <DialogHeader>
+                    <DialogTitle className="text-[#c9d1d9]">Global Settings</DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Update the global title and logo shown for all users.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3 pt-4">
+                    <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#58a6ff] via-[#1f6feb] to-[#238636] text-lg font-bold text-white">
+                          {settingsForm.logoUrl ? (
+                            <img src={settingsForm.logoUrl} alt={settingsForm.siteTitle} className="h-full w-full object-cover" />
+                          ) : (
+                            <span>{settingsForm.logoText || 'VP'}</span>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-[#e6edf3]">Global logo</p>
+                          <p className="text-xs text-[#8b949e]">Upload a logo image or keep using text initials.</p>
+                        </div>
+                      </div>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isLogoUploading}
+                        className="mt-3 w-full border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]"
+                      >
+                        {isLogoUploading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                        {isLogoUploading ? 'Uploading Logo...' : 'Upload Logo'}
+                      </Button>
+                    </div>
+                    <Input value={settingsForm.siteTitle} onChange={(e) => setSettingsForm((prev) => ({ ...prev, siteTitle: e.target.value }))} placeholder="Site title" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    <Input value={settingsForm.siteSubtitle} onChange={(e) => setSettingsForm((prev) => ({ ...prev, siteSubtitle: e.target.value }))} placeholder="Site subtitle" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    <Input value={settingsForm.logoText} onChange={(e) => setSettingsForm((prev) => ({ ...prev, logoText: e.target.value }))} placeholder="Logo text (e.g. VP)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    <Input value={settingsForm.logoUrl} onChange={(e) => setSettingsForm((prev) => ({ ...prev, logoUrl: e.target.value }))} placeholder="Logo image URL (optional)" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    <Button onClick={saveGlobalSettings} className="w-full bg-[#238636] hover:bg-[#2ea043]">
+                      Save Global Settings
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {!authUser ? (
+              <Dialog open={showAuthDialog} onOpenChange={setShowAuthDialog}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9]">
+                    <Lock className="w-4 h-4 mr-1" />
+                    Login
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="bg-[#161b22] border-[#30363d]">
+                  <DialogHeader>
+                    <DialogTitle className="text-[#c9d1d9]">{authMode === 'login' ? 'Login' : 'Create Account'}</DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Login or register to share themes.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 pt-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button type="button" variant={authMode === 'login' ? 'default' : 'outline'} onClick={() => setAuthMode('login')} className={authMode === 'login' ? 'bg-[#1f6feb] text-white' : 'border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'}>
+                        Login
+                      </Button>
+                      <Button type="button" variant={authMode === 'register' ? 'default' : 'outline'} onClick={() => setAuthMode('register')} className={authMode === 'register' ? 'bg-[#238636] text-white' : 'border-[#30363d] bg-[#0d1117] text-[#c9d1d9]'}>
+                        Register
+                      </Button>
+                    </div>
+                    <Input value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} placeholder="Username" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    <Input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="Password" className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]" />
+                    {authMode === 'login' && (
+                      <p className="text-[11px] text-[#8b949e]">Default admin: `admin` / `admin123`</p>
+                    )}
+                    <Button onClick={handleAuthSubmit} disabled={isAuthLoading} className="w-full bg-[#238636] hover:bg-[#2ea043]">
+                      {isAuthLoading ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      {authMode === 'login' ? 'Login' : 'Create Account'}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setShowPasswordDialog(true)} className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9]">
+                  <Lock className="w-4 h-4 mr-1" />
+                  Password
+                </Button>
+                <div className="rounded-full border border-[#30363d] bg-[#0d1117] px-3 py-1 text-xs text-[#c9d1d9]">
+                  {authUser.username} · {authUser.role}
+                </div>
+                <Button variant="outline" size="sm" onClick={logout} className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9]">
+                  Logout
+                </Button>
+              </>
+            )}
           </div>
 
           <button className="sm:hidden p-2 rounded-lg bg-[#21262d] border border-[#30363d]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -1766,8 +2248,66 @@ function App() {
             <Button variant="outline" size="sm" onClick={resetToDefaults} className="w-full border-[#30363d]">
               <RefreshCw className="w-4 h-4 mr-2" /> Reset
             </Button>
+            {authUser?.role === 'admin' && (
+              <Button variant="outline" size="sm" onClick={() => setShowSettingsDialog(true)} className="w-full border-[#30363d]">
+                <Settings2 className="w-4 h-4 mr-2" /> Settings
+              </Button>
+            )}
+            {!authUser ? (
+              <Button variant="outline" size="sm" onClick={() => setShowAuthDialog(true)} className="w-full border-[#30363d]">
+                <Lock className="w-4 h-4 mr-2" /> Login
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" size="sm" onClick={() => setShowPasswordDialog(true)} className="w-full border-[#30363d]">
+                  <Lock className="w-4 h-4 mr-2" /> Change Password
+                </Button>
+                <Button variant="outline" size="sm" onClick={logout} className="w-full border-[#30363d]">
+                  Logout ({authUser.username})
+                </Button>
+              </>
+            )}
           </div>
         )}
+
+        <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+          <DialogContent className="bg-[#161b22] border-[#30363d]">
+            <DialogHeader>
+              <DialogTitle className="text-[#c9d1d9]">Change Password</DialogTitle>
+              <DialogDescription className="sr-only">
+                Update the password for the currently logged-in account.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 pt-4">
+              <Input
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="Current password"
+                className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]"
+              />
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="New password"
+                className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]"
+              />
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="bg-[#0d1117] border-[#30363d] text-[#c9d1d9]"
+              />
+              <p className="text-[11px] text-[#8b949e]">Use your current password first, then set a new one.</p>
+              <Button onClick={handlePasswordChange} disabled={isPasswordLoading} className="w-full bg-[#238636] hover:bg-[#2ea043]">
+                {isPasswordLoading ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
+                Update Password
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </header>
 
       {/* Saved Configs Bar */}
@@ -2218,12 +2758,26 @@ function App() {
                           Theme Marketplace
                         </Label>
                         <p className="text-xs sm:text-sm text-[#8b949e]">
-                          Share your current preview as a PNG card, then browse user themes 6 at a time on this page.
+                          Everyone can browse themes. Login is required to share. Admin can moderate everything, and users can delete only their own themes.
                         </p>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <span className="rounded-full border border-[#30363d] bg-[#0d1117] px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#8b949e]">
+                            Public Browsing
+                          </span>
+                          <span className="rounded-full border border-[#1f6feb]/40 bg-[#1f6feb]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#79c0ff]">
+                            Login To Share
+                          </span>
+                          <span className="rounded-full border border-[#238636]/40 bg-[#238636]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#56d364]">
+                            2 Shares / Day
+                          </span>
+                          <span className="rounded-full border border-[#a371f7]/40 bg-[#a371f7]/10 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.2em] text-[#d2a8ff]">
+                            Max 2 Active Themes
+                          </span>
+                        </div>
                       </div>
                       <Button onClick={shareCurrentThemeToMarketplace} disabled={isCapturing} className="bg-gradient-to-r from-[#1f6feb] via-[#58a6ff] to-[#238636] text-white hover:opacity-90">
                         {isCapturing ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Camera className="w-4 h-4 mr-2" />}
-                        Share Current Theme
+                        {authUser ? 'Share Current Theme' : 'Login To Share'}
                       </Button>
                     </div>
                   </div>
@@ -2254,7 +2808,7 @@ function App() {
                               <div>
                                 <h3 className="text-sm font-semibold text-[#e6edf3]">{theme.name}</h3>
                                 <p className="text-[11px] text-[#8b949e]">
-                                  Shared {new Date(theme.createdAt).toLocaleDateString()}
+                                  Shared by {theme.ownerName} on {new Date(theme.createdAt).toLocaleDateString()}
                                 </p>
                               </div>
                               <div className="grid grid-cols-2 gap-2">
@@ -2265,6 +2819,16 @@ function App() {
                                   Download
                                 </Button>
                               </div>
+                              {(authUser?.role === 'admin' || authUser?.id === theme.ownerId) && (
+                                <Button
+                                  onClick={() => deleteSharedTheme(theme.id)}
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full border-[#f85149]/40 bg-[#161b22] text-[#ff7b72] hover:bg-[#3b1013]"
+                                >
+                                  Delete Theme
+                                </Button>
+                              )}
                             </div>
                           </div>
                         ))}
