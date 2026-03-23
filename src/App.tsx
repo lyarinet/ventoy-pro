@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { 
   Upload, Download, Image, Palette, Layout, Type, Lock,
@@ -43,6 +43,12 @@ interface CustomIconType {
   name: string;
   color: string;
   isCustom?: boolean;
+}
+
+interface SavedConfigRecord {
+  name: string;
+  config: ThemeConfig;
+  customIconTypes?: CustomIconType[];
 }
 
 // Font options
@@ -240,6 +246,30 @@ const DEFAULT_CONFIG: ThemeConfig = {
   iconFiles: {},
 };
 
+const STORAGE_KEYS = {
+  savedConfigs: 'ventoyThemeConfigs',
+  currentConfig: 'ventoyCurrentConfig',
+  currentCustomIconTypes: 'ventoyCurrentCustomIconTypes',
+  lastConfig: 'ventoyLastConfig',
+};
+
+const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
+  ...DEFAULT_CONFIG,
+  ...storedConfig,
+  customEntries: Array.isArray(storedConfig?.customEntries) ? storedConfig.customEntries : [],
+  iconFiles: storedConfig?.iconFiles ?? {},
+});
+
+const buildBackgroundPreviewUrl = (filename?: string) =>
+  filename ? `${API_URL}/uploads/backgrounds/${filename}` : null;
+
+const buildIconPreviewUrls = (iconFiles?: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(iconFiles ?? {})
+      .filter(([, filename]) => Boolean(filename))
+      .map(([type, filename]) => [type, `${API_URL}/uploads/icons/${filename}`])
+  );
+
 // OS logos as SVG components
 const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode => {
   const logos: Record<string, ReactNode> = {
@@ -331,7 +361,7 @@ function App() {
   const [newEntryName, setNewEntryName] = useState('');
   const [newEntryPath, setNewEntryPath] = useState('');
   const [newEntryAlias, setNewEntryAlias] = useState('');
-  const [savedConfigs, setSavedConfigs] = useState<Array<{ name: string; config: ThemeConfig }>>([]);
+  const [savedConfigs, setSavedConfigs] = useState<SavedConfigRecord[]>([]);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [customIconTypes, setCustomIconTypes] = useState<CustomIconType[]>([]);
@@ -341,38 +371,79 @@ function App() {
   
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const isFirstPersistenceRun = useRef(true);
+
+  const persistDraft = (nextConfig: ThemeConfig, nextCustomIconTypes: CustomIconType[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.currentConfig, JSON.stringify(nextConfig));
+      localStorage.setItem(STORAGE_KEYS.currentCustomIconTypes, JSON.stringify(nextCustomIconTypes));
+    } catch (error) {
+      console.error('Auto-save error:', error);
+    }
+  };
+
+  const persistLastConfig = (savedConfig: SavedConfigRecord) => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.lastConfig, JSON.stringify(savedConfig));
+    } catch (error) {
+      console.error('Last config save error:', error);
+    }
+  };
 
   // Load saved configs from localStorage on mount
   useEffect(() => {
     try {
-      const savedConfigsStr = localStorage.getItem('ventoyThemeConfigs');
-      if (savedConfigsStr) {
-        const savedConfigs = JSON.parse(savedConfigsStr);
-        setSavedConfigs(savedConfigs);
-        
-        // Load custom icon types from first config that has them
-        const configWithIcons = savedConfigs.find((c: any) => c.customIconTypes && c.customIconTypes.length > 0);
-        if (configWithIcons) {
-          setCustomIconTypes(configWithIcons.customIconTypes);
-        }
+      const savedConfigsStr = localStorage.getItem(STORAGE_KEYS.savedConfigs);
+      const parsedSavedConfigs = savedConfigsStr ? JSON.parse(savedConfigsStr) : [];
+      const nextSavedConfigs = Array.isArray(parsedSavedConfigs)
+        ? parsedSavedConfigs
+            .filter((item): item is SavedConfigRecord => Boolean(item?.name && item?.config))
+            .map((item) => ({
+              ...item,
+              config: normalizeConfig(item.config),
+              customIconTypes: Array.isArray(item.customIconTypes) ? item.customIconTypes : [],
+            }))
+        : [];
+
+      setSavedConfigs(nextSavedConfigs);
+
+      const currentConfigStr = localStorage.getItem(STORAGE_KEYS.currentConfig);
+      const currentCustomIconTypesStr = localStorage.getItem(STORAGE_KEYS.currentCustomIconTypes);
+      const lastConfigStr = localStorage.getItem(STORAGE_KEYS.lastConfig);
+
+      const restoredCurrentConfig = currentConfigStr ? normalizeConfig(JSON.parse(currentConfigStr)) : null;
+      const restoredLastConfig = lastConfigStr ? (JSON.parse(lastConfigStr) as SavedConfigRecord) : null;
+      const restoredConfig = restoredCurrentConfig ?? (restoredLastConfig?.config ? normalizeConfig(restoredLastConfig.config) : null);
+      const restoredCustomIconTypes = currentCustomIconTypesStr
+        ? JSON.parse(currentCustomIconTypesStr)
+        : restoredLastConfig?.customIconTypes ?? nextSavedConfigs.find((item) => item.customIconTypes?.length)?.customIconTypes ?? [];
+
+      if (Array.isArray(restoredCustomIconTypes)) {
+        setCustomIconTypes(restoredCustomIconTypes);
       }
-      
-      // Load last used config
-      const lastConfigStr = localStorage.getItem('ventoyLastConfig');
-      if (lastConfigStr) {
-        JSON.parse(lastConfigStr);
-        // Optionally auto-load the last config
-        // setConfig(lastConfig.config);
-        // toast.info(`Last config available: ${lastConfig.name}`);
+
+      if (restoredConfig) {
+        setConfig(restoredConfig);
+        setBackgroundPreview(buildBackgroundPreviewUrl(restoredConfig.backgroundFile));
+        setIconPreviews(buildIconPreviewUrls(restoredConfig.iconFiles));
       }
     } catch (error) {
       console.error('Error loading from localStorage:', error);
     }
   }, []);
 
-  const updateConfig = useCallback(<K extends keyof ThemeConfig>(key: K, value: ThemeConfig[K]) => {
-    setConfig(prev => ({ ...prev, [key]: value }));
-  }, []);
+  useEffect(() => {
+    if (isFirstPersistenceRun.current) {
+      isFirstPersistenceRun.current = false;
+      return;
+    }
+
+    persistDraft(config, customIconTypes);
+  }, [config, customIconTypes]);
+
+  const updateConfig = <K extends keyof ThemeConfig>(key: K, value: ThemeConfig[K]) => {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  };
 
   const applyAdvancedPreset = (preset: typeof ADVANCED_PRESETS[0]) => {
     setConfig(prev => ({
@@ -391,8 +462,6 @@ function App() {
   const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const localUrl = URL.createObjectURL(file);
-    setBackgroundPreview(localUrl);
 
     const formData = new FormData();
     formData.append('background', file);
@@ -405,6 +474,7 @@ function App() {
       const data = await response.json();
       if (data.success) {
         updateConfig('backgroundFile', data.filename);
+        setBackgroundPreview(buildBackgroundPreviewUrl(data.filename));
         toast.success('Background uploaded!');
       }
     } catch (error) {
@@ -415,8 +485,6 @@ function App() {
   const handleIconUpload = async (type: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const localUrl = URL.createObjectURL(file);
-    setIconPreviews(prev => ({ ...prev, [type]: localUrl }));
 
     const formData = new FormData();
     formData.append('icon', file);
@@ -428,8 +496,14 @@ function App() {
       });
       const data = await response.json();
       if (data.success) {
-        const currentIconFiles = config.iconFiles || {};
-        updateConfig('iconFiles', { ...currentIconFiles, [type]: data.filename });
+        setConfig((prev) => ({
+          ...prev,
+          iconFiles: { ...(prev.iconFiles ?? {}), [type]: data.filename },
+        }));
+        setIconPreviews((prev) => ({
+          ...prev,
+          [type]: `${API_URL}/uploads/icons/${data.filename}`,
+        }));
         toast.success(`${type} icon uploaded!`);
       }
     } catch (error) {
@@ -470,7 +544,7 @@ function App() {
       color: newCustomIconColor,
       isCustom: true,
     };
-    setCustomIconTypes([...customIconTypes, newIconType]);
+    setCustomIconTypes((prev) => [...prev, newIconType]);
     setNewCustomIconId('');
     setNewCustomIconName('');
     setNewCustomIconColor('#ff00ff');
@@ -478,37 +552,54 @@ function App() {
   };
 
   const removeCustomIconType = (iconId: string) => {
-    setCustomIconTypes(customIconTypes.filter(t => t.id !== iconId));
-    // Also remove from config if exists
-    const currentIconFiles = config.iconFiles || {};
-    if (currentIconFiles[iconId]) {
-      const newIconFiles = { ...currentIconFiles };
-      delete newIconFiles[iconId];
-      updateConfig('iconFiles', newIconFiles);
-    }
+    setCustomIconTypes((prev) => prev.filter((t) => t.id !== iconId));
+    setIconPreviews((prev) => {
+      const nextPreviews = { ...prev };
+      delete nextPreviews[iconId];
+      return nextPreviews;
+    });
+    setConfig((prev) => {
+      if (!prev.iconFiles?.[iconId]) {
+        return prev;
+      }
+
+      const nextIconFiles = { ...prev.iconFiles };
+      delete nextIconFiles[iconId];
+
+      return {
+        ...prev,
+        iconFiles: nextIconFiles,
+      };
+    });
     toast.success('Custom icon type removed!');
   };
 
   const saveConfig = () => {
-    if (!configName) {
+    const trimmedName = configName.trim();
+
+    if (!trimmedName) {
       toast.error('Please enter a config name');
       return;
     }
-    const savedConfig = { name: configName, config: { ...config }, customIconTypes };
-    
-    // Save to state
-    setSavedConfigs(prev => [...prev, savedConfig]);
-    
-    // Save to localStorage
+
+    const savedConfig: SavedConfigRecord = {
+      name: trimmedName,
+      config: normalizeConfig(config),
+      customIconTypes,
+    };
+
     try {
-      const existingConfigs = JSON.parse(localStorage.getItem('ventoyThemeConfigs') || '[]');
-      existingConfigs.push(savedConfig);
-      localStorage.setItem('ventoyThemeConfigs', JSON.stringify(existingConfigs));
-      
-      // Also save the last used config
-      localStorage.setItem('ventoyLastConfig', JSON.stringify(savedConfig));
-      
-      toast.success('Configuration saved permanently!');
+      const nextSavedConfigs = [
+        ...savedConfigs.filter((item) => item.name !== trimmedName),
+        savedConfig,
+      ];
+
+      setSavedConfigs(nextSavedConfigs);
+      localStorage.setItem(STORAGE_KEYS.savedConfigs, JSON.stringify(nextSavedConfigs));
+      persistDraft(savedConfig.config, customIconTypes);
+      persistLastConfig(savedConfig);
+
+      toast.success(`"${trimmedName}" has been saved permanently.`);
     } catch (error) {
       toast.error('Failed to save to localStorage');
       console.error('localStorage save error:', error);
@@ -518,11 +609,16 @@ function App() {
     setShowSaveDialog(false);
   };
 
-  const loadConfig = (saved: { name: string; config: ThemeConfig, customIconTypes?: CustomIconType[] }) => {
-    setConfig(saved.config);
-    if (saved.customIconTypes) {
-      setCustomIconTypes(saved.customIconTypes);
-    }
+  const loadConfig = (saved: SavedConfigRecord) => {
+    const nextConfig = normalizeConfig(saved.config);
+    const nextCustomIconTypes = saved.customIconTypes ?? [];
+
+    setConfig(nextConfig);
+    setCustomIconTypes(nextCustomIconTypes);
+    setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
+    setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
+    persistDraft(nextConfig, nextCustomIconTypes);
+    persistLastConfig({ ...saved, config: nextConfig, customIconTypes: nextCustomIconTypes });
     toast.success(`Loaded ${saved.name}`);
   };
 
@@ -544,7 +640,10 @@ function App() {
     reader.onload = (event) => {
       try {
         const imported = JSON.parse(event.target?.result as string);
-        setConfig({ ...DEFAULT_CONFIG, ...imported });
+        const nextConfig = normalizeConfig(imported);
+        setConfig(nextConfig);
+        setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
+        setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
         toast.success('Configuration imported!');
       } catch {
         toast.error('Invalid configuration file');
@@ -623,6 +722,7 @@ function App() {
 
   const resetToDefaults = () => {
     setConfig(DEFAULT_CONFIG);
+    setCustomIconTypes([]);
     setBackgroundPreview(null);
     setIconPreviews({});
     toast.info('Reset to default values');
