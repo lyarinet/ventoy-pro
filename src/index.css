@@ -2,6 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: 'Unifont Regular';
+  src:
+    local('Unifont Regular'),
+    local('Unifont'),
+    url('./assets/fonts/SpaceMono-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'DejaVu Sans';
+  src:
+    local('DejaVu Sans'),
+    local('DejaVuSans'),
+    url('./assets/fonts/NotoSans-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Terminus';
+  src:
+    local('Terminus'),
+    local('TerminusTTF'),
+    url('./assets/fonts/VT323-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Liberation Sans';
+  src:
+    local('Liberation Sans'),
+    local('LiberationSans'),
+    url('./assets/fonts/LibreFranklin-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --background: 240 25% 5%;

@@ -4,7 +4,7 @@ import {
   Upload, Download, Image, Palette, Layout, Type, Lock,
   Check, RefreshCw, Info, ChevronRight, Menu, X,
   Sparkles, Save, FolderOpen, Eye, Zap, Shield, Settings2,
-  MonitorPlay, Layers, FileCode, Pencil
+  MonitorPlay, Layers, FileCode, Pencil, Camera
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,7 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
+import { toPng } from 'html-to-image';
 import './App.css';
 
 // API base URL
@@ -51,6 +52,15 @@ interface SavedConfigRecord {
   customIconTypes?: CustomIconType[];
 }
 
+interface MarketplaceThemeRecord {
+  id: string;
+  name: string;
+  previewImage: string;
+  config: ThemeConfig;
+  customIconTypes: CustomIconType[];
+  createdAt: string;
+}
+
 interface PreviewMenuItem {
   name: string;
   icon: string;
@@ -61,6 +71,15 @@ interface CustomEntry {
   path: string;
   alias: string;
   icon?: string;
+}
+
+interface CommunityTheme {
+  name: string;
+  badge: string;
+  summary: string;
+  accent: string;
+  background: string;
+  config: Partial<ThemeConfig>;
 }
 
 // Font options
@@ -155,6 +174,141 @@ const ADVANCED_PRESETS = [
     text: '#f39c12',
     secondary: '#e74c3c',
     accent: '#f1c40f'
+  },
+];
+
+const COMMUNITY_THEMES: CommunityTheme[] = [
+  {
+    name: 'Minimal Frost',
+    badge: 'Minimal',
+    summary: 'Clean glass layout with icy neutrals and quiet typography.',
+    accent: '#7dd3fc',
+    background: 'linear-gradient(135deg, #0f172a, #1e293b 45%, #334155)',
+    config: {
+      desktopColor: '#0f172a',
+      primaryColor: '#7dd3fc',
+      secondaryColor: '#38bdf8',
+      accentColor: '#e2e8f0',
+      normalTextColor: '#cbd5e1',
+      selectedTextColor: '#f8fafc',
+      headerColor: '#e0f2fe',
+      footerColor: '#94a3b8',
+      progressBgColor: '#1e293b',
+      progressFgColor: '#38bdf8',
+      titleFont: 'DejaVu Sans',
+      itemFont: 'DejaVu Sans',
+      titleFontSize: 22,
+      itemFontSize: 15,
+      menuLeft: 28,
+      menuTop: 28,
+      menuWidth: 44,
+      menuHeight: 40,
+      glassEffect: true,
+      glowEffect: false,
+      roundedCorners: true,
+      menuAnimation: 'fade',
+      resolution: '1920x1080',
+      headerText: 'Ventoy Minimal',
+    },
+  },
+  {
+    name: 'Hacker Green',
+    badge: 'Hacker',
+    summary: 'Terminal-inspired matrix look with hard contrast and punchy glow.',
+    accent: '#22c55e',
+    background: 'linear-gradient(135deg, #020617, #052e16 52%, #14532d)',
+    config: {
+      desktopColor: '#020617',
+      primaryColor: '#22c55e',
+      secondaryColor: '#15803d',
+      accentColor: '#4ade80',
+      normalTextColor: '#86efac',
+      selectedTextColor: '#dcfce7',
+      headerColor: '#4ade80',
+      footerColor: '#22c55e',
+      progressBgColor: '#052e16',
+      progressFgColor: '#22c55e',
+      titleFont: 'Terminus',
+      itemFont: 'Terminus',
+      titleFontSize: 26,
+      itemFontSize: 16,
+      menuLeft: 24,
+      menuTop: 26,
+      menuWidth: 52,
+      menuHeight: 46,
+      glassEffect: false,
+      glowEffect: true,
+      roundedCorners: false,
+      menuAnimation: 'slide',
+      resolution: '1920x1080',
+      headerText: 'Boot Sequence',
+    },
+  },
+  {
+    name: 'Retro BIOS',
+    badge: 'Retro',
+    summary: 'Amber-on-dark nostalgic boot screen with chunky system fonts.',
+    accent: '#f59e0b',
+    background: 'linear-gradient(135deg, #09090b, #1c1917 55%, #451a03)',
+    config: {
+      desktopColor: '#09090b',
+      primaryColor: '#f59e0b',
+      secondaryColor: '#d97706',
+      accentColor: '#fbbf24',
+      normalTextColor: '#fcd34d',
+      selectedTextColor: '#fffbeb',
+      headerColor: '#facc15',
+      footerColor: '#f59e0b',
+      progressBgColor: '#292524',
+      progressFgColor: '#f59e0b',
+      titleFont: 'Terminus',
+      itemFont: 'Unifont Regular',
+      titleFontSize: 24,
+      itemFontSize: 17,
+      menuLeft: 20,
+      menuTop: 24,
+      menuWidth: 58,
+      menuHeight: 48,
+      glassEffect: false,
+      glowEffect: false,
+      roundedCorners: false,
+      menuAnimation: 'none',
+      resolution: '1024x768',
+      headerText: 'Legacy Boot Center',
+    },
+  },
+  {
+    name: 'Aurora Glass',
+    badge: 'Community',
+    summary: 'Soft neon gradients, curved panels and modern landing-screen vibes.',
+    accent: '#a78bfa',
+    background: 'linear-gradient(135deg, #0b1020, #1d4ed8 45%, #14b8a6)',
+    config: {
+      desktopColor: '#0b1020',
+      primaryColor: '#a78bfa',
+      secondaryColor: '#60a5fa',
+      accentColor: '#2dd4bf',
+      normalTextColor: '#dbeafe',
+      selectedTextColor: '#ffffff',
+      headerColor: '#c4b5fd',
+      footerColor: '#93c5fd',
+      progressBgColor: '#1e293b',
+      progressFgColor: '#60a5fa',
+      titleFont: 'Liberation Sans',
+      itemFont: 'DejaVu Sans',
+      titleFontSize: 24,
+      itemFontSize: 15,
+      menuLeft: 27,
+      menuTop: 28,
+      menuWidth: 48,
+      menuHeight: 43,
+      glassEffect: true,
+      glowEffect: true,
+      roundedCorners: true,
+      menuAnimation: 'zoom',
+      resolution: '2560x1440',
+      headerText: 'Aurora Launchpad',
+    },
   },
 ];
 
@@ -346,6 +500,7 @@ const STORAGE_KEYS = {
   currentConfig: 'ventoyCurrentConfig',
   currentCustomIconTypes: 'ventoyCurrentCustomIconTypes',
   lastConfig: 'ventoyLastConfig',
+  marketplaceThemes: 'ventoyMarketplaceThemes',
 };
 
 const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfig => ({
@@ -435,6 +590,66 @@ const getPreviewAnimationClass = (animation: string) => {
 
 const getAllIconTypes = (customIconTypes: CustomIconType[]) => [...ICON_TYPES, ...customIconTypes];
 
+const downloadJsonFile = (filename: string, data: unknown) => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const waitForRenderedAssets = async (root: HTMLElement) => {
+  const images = Array.from(root.querySelectorAll('img'));
+
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          if (image.complete) {
+            resolve();
+            return;
+          }
+
+          image.onload = () => resolve();
+          image.onerror = () => resolve();
+        })
+    )
+  );
+
+  if ('fonts' in document) {
+    await document.fonts.ready;
+  }
+};
+
+const renderElementToPngDataUrl = async (element: HTMLElement) => {
+  await waitForRenderedAssets(element);
+
+  try {
+    return await toPng(element, {
+      cacheBust: true,
+      pixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+      backgroundColor: '#0d1117',
+      includeQueryParams: true,
+    });
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && error.message
+        ? `Preview image could not be rendered: ${error.message}`
+        : 'Preview image could not be rendered.'
+    );
+  }
+};
+
+const exportElementAsPng = async (element: HTMLElement, filename: string) => {
+  const pngUrl = await renderElementToPngDataUrl(element);
+  const link = document.createElement('a');
+  link.href = pngUrl;
+  link.download = filename;
+  link.click();
+};
+
 // OS logos as SVG components
 const OSLogo = ({ type, size = 48 }: { type: string; size?: number }): ReactNode => {
   const logos: Record<string, ReactNode> = {
@@ -521,6 +736,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('templates');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [newEntryName, setNewEntryName] = useState('');
   const [newEntryPath, setNewEntryPath] = useState('');
@@ -528,6 +744,7 @@ function App() {
   const [newEntryIcon, setNewEntryIcon] = useState('auto');
   const [editingEntryIndex, setEditingEntryIndex] = useState<number | null>(null);
   const [savedConfigs, setSavedConfigs] = useState<SavedConfigRecord[]>([]);
+  const [marketplaceThemes, setMarketplaceThemes] = useState<MarketplaceThemeRecord[]>([]);
   const [configName, setConfigName] = useState('');
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [customIconTypes, setCustomIconTypes] = useState<CustomIconType[]>([]);
@@ -537,6 +754,7 @@ function App() {
   
   const backgroundInputRef = useRef<HTMLInputElement>(null);
   const iconInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const previewCaptureRef = useRef<HTMLDivElement>(null);
   const isFirstPersistenceRun = useRef(true);
   const availableIconTypes = getAllIconTypes(customIconTypes);
   const detectedEntryIcon = inferPreviewIcon(`${newEntryAlias} ${newEntryName} ${newEntryPath}`, customIconTypes, config.iconFiles);
@@ -597,6 +815,20 @@ function App() {
 
       setSavedConfigs(nextSavedConfigs);
 
+      const marketplaceThemesStr = localStorage.getItem(STORAGE_KEYS.marketplaceThemes);
+      const parsedMarketplaceThemes = marketplaceThemesStr ? JSON.parse(marketplaceThemesStr) : [];
+      const nextMarketplaceThemes = Array.isArray(parsedMarketplaceThemes)
+        ? parsedMarketplaceThemes
+            .filter((item): item is MarketplaceThemeRecord => Boolean(item?.id && item?.name && item?.config && item?.previewImage))
+            .map((item) => ({
+              ...item,
+              config: normalizeConfig(item.config),
+              customIconTypes: Array.isArray(item.customIconTypes) ? item.customIconTypes : [],
+            }))
+        : [];
+
+      setMarketplaceThemes(nextMarketplaceThemes);
+
       const currentConfigStr = localStorage.getItem(STORAGE_KEYS.currentConfig);
       const currentCustomIconTypesStr = localStorage.getItem(STORAGE_KEYS.currentCustomIconTypes);
       const lastConfigStr = localStorage.getItem(STORAGE_KEYS.lastConfig);
@@ -647,6 +879,14 @@ function App() {
       accentColor: preset.accent,
     }));
     toast.success(`Applied ${preset.name} theme!`);
+  };
+
+  const applyCommunityTheme = (theme: CommunityTheme) => {
+    setConfig((prev) => ({
+      ...prev,
+      ...theme.config,
+    }));
+    toast.success(`Applied ${theme.name} community theme!`);
   };
 
   const handleBackgroundUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -866,13 +1106,64 @@ function App() {
     toast.success(`Loaded ${saved.name}`);
   };
 
+  const exportSavedConfig = (saved: SavedConfigRecord) => {
+    downloadJsonFile(`${saved.name.replace(/\s+/g, '-').toLowerCase()}-theme.json`, {
+      ...saved.config,
+      customIconTypes: saved.customIconTypes ?? [],
+    });
+    toast.success(`Exported ${saved.name}`);
+  };
+
+  const applyMarketplaceTheme = (theme: MarketplaceThemeRecord) => {
+    const nextConfig = normalizeConfig(theme.config);
+    setConfig(nextConfig);
+    setCustomIconTypes(theme.customIconTypes);
+    setBackgroundPreview(buildBackgroundPreviewUrl(nextConfig.backgroundFile));
+    setIconPreviews(buildIconPreviewUrls(nextConfig.iconFiles));
+    persistDraft(nextConfig, theme.customIconTypes);
+    toast.success(`Loaded ${theme.name} from marketplace`);
+  };
+
+  const downloadMarketplaceTheme = (theme: MarketplaceThemeRecord) => {
+    downloadJsonFile(`${theme.name.replace(/\s+/g, '-').toLowerCase()}-marketplace-theme.json`, {
+      ...theme.config,
+      customIconTypes: theme.customIconTypes,
+    });
+    toast.success(`Downloaded ${theme.name}`);
+  };
+
+  const shareCurrentThemeToMarketplace = async () => {
+    if (!previewCaptureRef.current) {
+      toast.error('Preview is not ready yet.');
+      return;
+    }
+
+    setIsCapturing(true);
+
+    try {
+      const previewImage = await renderElementToPngDataUrl(previewCaptureRef.current);
+      const record: MarketplaceThemeRecord = {
+        id: `${Date.now()}`,
+        name: config.headerText.trim() || `Theme ${marketplaceThemes.length + 1}`,
+        previewImage,
+        config: normalizeConfig(config),
+        customIconTypes,
+        createdAt: new Date().toISOString(),
+      };
+
+      const nextMarketplaceThemes = [record, ...marketplaceThemes].slice(0, 24);
+      setMarketplaceThemes(nextMarketplaceThemes);
+      localStorage.setItem(STORAGE_KEYS.marketplaceThemes, JSON.stringify(nextMarketplaceThemes));
+      toast.success('Theme shared to marketplace!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not share theme.');
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
   const exportConfig = () => {
-    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `ventoy-theme-config-${Date.now()}.json`;
-    link.click();
+    downloadJsonFile(`ventoy-theme-config-${Date.now()}.json`, config);
     toast.success('Configuration exported!');
   };
 
@@ -963,6 +1254,27 @@ function App() {
       toast.error('Error downloading theme package');
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const captureBootScreen = async () => {
+    if (!previewCaptureRef.current) {
+      toast.error('Preview is not ready yet.');
+      return;
+    }
+
+    setIsCapturing(true);
+
+    try {
+      await exportElementAsPng(
+        previewCaptureRef.current,
+        `ventoy-preview-${config.headerText.trim().replace(/\s+/g, '-').toLowerCase() || 'theme'}.png`
+      );
+      toast.success('Boot screen screenshot exported!');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not capture preview.');
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -1075,13 +1387,21 @@ function App() {
           <div className="max-w-7xl mx-auto flex items-center gap-2 overflow-x-auto">
             <span className="text-xs text-[#8b949e] whitespace-nowrap">Saved:</span>
             {savedConfigs.map((saved, idx) => (
-              <button
-                key={idx}
-                onClick={() => loadConfig(saved)}
-                className="px-3 py-1 rounded-full text-xs bg-[#21262d] hover:bg-[#30363d] text-[#58a6ff] border border-[#30363d] whitespace-nowrap transition-colors"
-              >
-                {saved.name}
-              </button>
+              <div key={idx} className="flex items-center overflow-hidden rounded-full border border-[#30363d] bg-[#21262d]">
+                <button
+                  onClick={() => loadConfig(saved)}
+                  className="px-3 py-1 text-xs text-[#58a6ff] whitespace-nowrap transition-colors hover:bg-[#30363d]"
+                >
+                  {saved.name}
+                </button>
+                <button
+                  onClick={() => exportSavedConfig(saved)}
+                  className="border-l border-[#30363d] px-2 py-1 text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-white"
+                  title={`Export ${saved.name}`}
+                >
+                  <Download className="h-3 w-3" />
+                </button>
+              </div>
             ))}
           </div>
         </div>
@@ -1179,6 +1499,96 @@ function App() {
                       </button>
                     ))}
                   </div>
+
+                  <div className="space-y-2 pt-4 border-t border-[#30363d]">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
+                          <Layers className="w-4 h-4" />
+                          Community Themes
+                        </Label>
+                        <p className="text-xs text-[#8b949e]">
+                          Marketplace-style curated themes. Apply one, tweak it, then export your saved version to share.
+                        </p>
+                      </div>
+                      <Button onClick={shareCurrentThemeToMarketplace} disabled={isCapturing} size="sm" variant="outline" className="border-[#30363d] bg-[#0d1117] text-[#c9d1d9] hover:bg-[#21262d]">
+                        {isCapturing ? <RefreshCw className="w-4 h-4 mr-1 animate-spin" /> : <Camera className="w-4 h-4 mr-1" />}
+                        Share Current Theme
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {COMMUNITY_THEMES.map((theme) => (
+                      <button
+                        key={theme.name}
+                        onClick={() => applyCommunityTheme(theme)}
+                        className="group overflow-hidden rounded-2xl border border-[#30363d] text-left transition-all hover:-translate-y-1 hover:border-[#58a6ff] hover:shadow-xl hover:shadow-blue-500/10"
+                      >
+                        <div className="p-4" style={{ background: theme.background }}>
+                          <div className="mb-6 flex items-start justify-between gap-3">
+                            <span
+                              className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                              style={{ borderColor: `${theme.accent}80`, color: theme.accent, backgroundColor: '#0d111780' }}
+                            >
+                              {theme.badge}
+                            </span>
+                            <div
+                              className="h-10 w-10 rounded-2xl border"
+                              style={{
+                                background: `linear-gradient(135deg, ${theme.accent}, rgba(255,255,255,0.15))`,
+                                borderColor: `${theme.accent}66`,
+                              }}
+                            />
+                          </div>
+                          <h3 className="text-base font-semibold text-white">{theme.name}</h3>
+                          <p className="mt-2 text-sm leading-5 text-white/80">{theme.summary}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2 pt-4 border-t border-[#30363d]">
+                    <Label className="text-[#58a6ff] text-sm flex items-center gap-2">
+                      <Save className="w-4 h-4" />
+                      Theme Marketplace
+                    </Label>
+                    <p className="text-xs text-[#8b949e]">
+                      Shared user themes appear here with PNG previews. You can apply them or download the config package.
+                    </p>
+                  </div>
+
+                  {marketplaceThemes.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {marketplaceThemes.map((theme) => (
+                        <div key={theme.id} className="overflow-hidden rounded-2xl border border-[#30363d] bg-[#0d1117]">
+                          <div className="aspect-[16/10] overflow-hidden border-b border-[#30363d] bg-black">
+                            <img src={theme.previewImage} alt={theme.name} className="h-full w-full object-cover" />
+                          </div>
+                          <div className="space-y-3 p-4">
+                            <div>
+                              <h3 className="text-sm font-semibold text-[#e6edf3]">{theme.name}</h3>
+                              <p className="text-[11px] text-[#8b949e]">
+                                Shared {new Date(theme.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Button onClick={() => applyMarketplaceTheme(theme)} size="sm" variant="outline" className="border-[#30363d] bg-[#161b22] text-[#c9d1d9] hover:bg-[#21262d]">
+                                Apply
+                              </Button>
+                              <Button onClick={() => downloadMarketplaceTheme(theme)} size="sm" className="bg-gradient-to-r from-[#1f6feb] to-[#58a6ff] text-white hover:opacity-90">
+                                Download
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-[#30363d] bg-[#0d1117] px-4 py-8 text-center text-sm text-[#8b949e]">
+                      No user themes shared yet. Click `Share Current Theme` to publish the first preview card.
+                    </div>
+                  )}
                 </TabsContent>
 
                 {/* Background Tab */}
@@ -1397,6 +1807,10 @@ function App() {
 
                 {/* Fonts Tab */}
                 <TabsContent value="fonts" className="space-y-4 mt-0">
+                  <div className="rounded-lg border border-[#30363d] bg-[#0d1117] px-3 py-2 text-xs text-[#8b949e]">
+                    Preview auto-detects local fonts first. If your system does not have them, the app uses bundled project fonts automatically.
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label className="text-[#58a6ff] text-sm">Title Font</Label>
@@ -1666,6 +2080,7 @@ function App() {
               </CardHeader>
               <CardContent className="px-3 sm:px-6">
                 <div 
+                  ref={previewCaptureRef}
                   className={`relative rounded-xl overflow-hidden mx-auto shadow-2xl ${previewAnimationClass}`}
                   style={{ 
                     aspectRatio: getAspectRatio(config.resolution),
@@ -1797,7 +2212,15 @@ function App() {
             </Card>
 
             {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+              <Button onClick={captureBootScreen} disabled={isCapturing} variant="outline" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9] h-auto py-2 sm:py-3 text-xs sm:text-sm">
+                {isCapturing ? <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin" /> : <Camera className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
+                <div className="text-left">
+                  <div className="font-medium">Boot Screen Capture</div>
+                  <div className="text-[8px] sm:text-[10px] text-[#6e7681]">PNG snapshot of the live preview</div>
+                </div>
+              </Button>
+
               <Button onClick={generateThemeFiles} disabled={isGenerating} variant="outline" className="border-[#30363d] hover:bg-[#21262d] text-[#c9d1d9] h-auto py-2 sm:py-3 text-xs sm:text-sm">
                 {isGenerating ? <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2 animate-spin" /> : <FileCode className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
                 <div className="text-left">

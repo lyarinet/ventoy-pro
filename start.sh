@@ -65,6 +65,18 @@ else
     echo -e "${RED}✗ package.json not found!${NC}"
     exit 1
 fi
+
+# Install html-to-image for screenshot functionality
+echo ""
+echo "📍 Installing html-to-image for screenshots..."
+echo "-----------------------------------"
+npm install html-to-image --save
+
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✓ html-to-image installed successfully${NC}"
+else
+    echo -e "${YELLOW}⚠ Warning: Failed to install html-to-image${NC}"
+fi
 echo ""
 
 # Step 3: Build the project
