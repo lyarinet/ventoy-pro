@@ -90,6 +90,14 @@ interface BuiltInBackground {
   accent: string;
 }
 
+interface MenuStylePreset {
+  id: ThemeConfig['menuStyle'];
+  name: string;
+  summary: string;
+  accent: string;
+  config: Partial<ThemeConfig>;
+}
+
 // Font options
 const FONT_OPTIONS = [
   { value: 'Unifont Regular', label: 'Unifont (Default)' },
@@ -391,6 +399,107 @@ const WIZARD_STEPS = [
   },
 ] as const;
 
+const MENU_STYLE_PRESETS: MenuStylePreset[] = [
+  {
+    id: 'classic-bios',
+    name: 'Classic BIOS',
+    summary: 'Sharp-cornered old-school layout with restrained motion and clean boot utility vibes.',
+    accent: '#f59e0b',
+    config: {
+      menuLeft: 16,
+      menuTop: 19,
+      menuWidth: 62,
+      menuHeight: 54,
+      roundedCorners: false,
+      glassEffect: false,
+      glowEffect: false,
+      menuAnimation: 'none',
+      titleFont: 'Terminus',
+      itemFont: 'Unifont Regular',
+      showIcons: false,
+    },
+  },
+  {
+    id: 'modern-glass',
+    name: 'Modern Glass',
+    summary: 'Balanced rounded panel with blur, glow, and smooth modern launcher feel.',
+    accent: '#58a6ff',
+    config: {
+      menuLeft: 25,
+      menuTop: 30,
+      menuWidth: 50,
+      menuHeight: 45,
+      roundedCorners: true,
+      glassEffect: true,
+      glowEffect: true,
+      menuAnimation: 'fade',
+      titleFont: 'Unifont Regular',
+      itemFont: 'Unifont Regular',
+      showIcons: true,
+    },
+  },
+  {
+    id: 'compact-list',
+    name: 'Compact List',
+    summary: 'Slimmer panel and tighter item spacing for a practical dense boot list.',
+    accent: '#22c55e',
+    config: {
+      menuLeft: 10,
+      menuTop: 22,
+      menuWidth: 34,
+      menuHeight: 44,
+      roundedCorners: true,
+      glassEffect: false,
+      glowEffect: false,
+      menuAnimation: 'slide',
+      titleFont: 'DejaVu Sans',
+      itemFont: 'DejaVu Sans',
+      itemFontSize: 14,
+      showIcons: true,
+    },
+  },
+  {
+    id: 'centered-arcade',
+    name: 'Centered Arcade',
+    summary: 'Centered neon stage with chunkier framing and a loud arcade attract-screen energy.',
+    accent: '#a78bfa',
+    config: {
+      menuLeft: 29,
+      menuTop: 26,
+      menuWidth: 42,
+      menuHeight: 50,
+      roundedCorners: true,
+      glassEffect: false,
+      glowEffect: true,
+      menuAnimation: 'zoom',
+      titleFont: 'Liberation Sans',
+      itemFont: 'DejaVu Sans',
+      titleFontSize: 26,
+      showIcons: true,
+    },
+  },
+  {
+    id: 'minimal-terminal',
+    name: 'Minimal Terminal',
+    summary: 'Wide terminal strip with monospace text, low visual noise, and command-line clarity.',
+    accent: '#2dd4bf',
+    config: {
+      menuLeft: 8,
+      menuTop: 24,
+      menuWidth: 70,
+      menuHeight: 34,
+      roundedCorners: false,
+      glassEffect: false,
+      glowEffect: false,
+      menuAnimation: 'none',
+      titleFont: 'Terminus',
+      itemFont: 'Terminus',
+      itemFontSize: 14,
+      showIcons: false,
+    },
+  },
+];
+
 const TAB_ITEMS: Array<{
   value: string;
   label: string;
@@ -467,8 +576,8 @@ const TAB_ITEMS: Array<{
     value: 'layout',
     label: 'Layout',
     shortLabel: 'Layout',
-    hint: 'Place menu blocks precisely',
-    tooltip: 'Menu position, size & resolution',
+    hint: 'Menu styles, position and resolution',
+    tooltip: 'Choose menu style, position, size and resolution',
     icon: Layout,
     accent: 'from-[#38bdf8] via-[#3b82f6] to-[#6366f1]',
   },
@@ -498,6 +607,7 @@ type ThemeConfig = {
   accentColor: string;
   
   // Layout
+  menuStyle: 'classic-bios' | 'modern-glass' | 'compact-list' | 'centered-arcade' | 'minimal-terminal';
   menuLeft: number;
   menuTop: number;
   menuWidth: number;
@@ -551,6 +661,7 @@ const DEFAULT_CONFIG: ThemeConfig = {
   secondaryColor: '#1f6feb',
   accentColor: '#2ea043',
   
+  menuStyle: 'modern-glass',
   menuLeft: 25,
   menuTop: 30,
   menuWidth: 50,
@@ -597,6 +708,9 @@ const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfi
   ...DEFAULT_CONFIG,
   ...storedConfig,
   backgroundSource: storedConfig?.backgroundSource === 'builtin' ? 'builtin' : 'upload',
+  menuStyle: MENU_STYLE_PRESETS.some((preset) => preset.id === storedConfig?.menuStyle)
+    ? (storedConfig?.menuStyle as ThemeConfig['menuStyle'])
+    : DEFAULT_CONFIG.menuStyle,
   customEntries: Array.isArray(storedConfig?.customEntries)
     ? storedConfig.customEntries.map((entry) => ({
         name: entry?.name ?? '',
@@ -687,6 +801,107 @@ const getPreviewItems = (config: ThemeConfig, customIconTypes: CustomIconType[])
 const getPreviewAnimationClass = (animation: string) => {
   if (animation === 'none') return '';
   return `animate-${animation}`;
+};
+
+const getPreviewMenuStyle = (config: ThemeConfig) => {
+  const base = {
+    panelBackground: config.glassEffect ? 'rgba(13, 17, 23, 0.85)' : 'rgba(13, 17, 23, 0.98)',
+    borderWidth: 2,
+    borderRadius: config.roundedCorners ? 12 : 0,
+    boxShadow: config.glowEffect
+      ? `0 0 30px ${config.primaryColor}40, inset 0 0 30px ${config.primaryColor}10`
+      : '0 10px 40px rgba(0,0,0,0.5)',
+    backdropFilter: config.glassEffect ? 'blur(10px)' : undefined,
+    itemPaddingX: 8,
+    itemPaddingY: 6,
+    itemGap: 8,
+    itemBorderRadius: config.roundedCorners ? 6 : 0,
+    itemFontScale: 0.7,
+    titleFontScale: 0.6,
+    panelPadding: 12,
+    progressTop: '82%',
+    progressWidth: '60%',
+    terminalHeader: false,
+    selectedFill: `${config.primaryColor}60`,
+    showSelectionMarker: false,
+    marker: '>',
+  };
+
+  switch (config.menuStyle) {
+    case 'classic-bios':
+      return {
+        ...base,
+        panelBackground: 'rgba(7, 12, 27, 0.98)',
+        borderWidth: 1,
+        borderRadius: 0,
+        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+        backdropFilter: undefined,
+        itemPaddingX: 6,
+        itemPaddingY: 4,
+        itemGap: 6,
+        itemBorderRadius: 0,
+        titleFontScale: 0.56,
+        panelPadding: 10,
+        selectedFill: 'rgba(255,255,255,0.08)',
+        showSelectionMarker: true,
+        marker: '>',
+      };
+    case 'compact-list':
+      return {
+        ...base,
+        panelBackground: 'rgba(9, 14, 22, 0.96)',
+        borderWidth: 1,
+        boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+        itemPaddingX: 6,
+        itemPaddingY: 4,
+        itemGap: 6,
+        itemFontScale: 0.64,
+        titleFontScale: 0.55,
+        panelPadding: 10,
+        progressWidth: '50%',
+      };
+    case 'centered-arcade':
+      return {
+        ...base,
+        panelBackground: 'rgba(8, 10, 24, 0.92)',
+        borderWidth: 3,
+        borderRadius: 16,
+        boxShadow: `0 0 36px ${config.primaryColor}55, inset 0 0 24px ${config.accentColor}22`,
+        itemPaddingX: 10,
+        itemPaddingY: 7,
+        itemGap: 9,
+        itemBorderRadius: 10,
+        itemFontScale: 0.72,
+        titleFontScale: 0.64,
+        panelPadding: 14,
+        progressTop: '84%',
+      };
+    case 'minimal-terminal':
+      return {
+        ...base,
+        panelBackground: 'rgba(4, 10, 12, 0.98)',
+        borderWidth: 1,
+        borderRadius: 0,
+        boxShadow: '0 0 0 1px rgba(45,212,191,0.16)',
+        backdropFilter: undefined,
+        itemPaddingX: 4,
+        itemPaddingY: 3,
+        itemGap: 5,
+        itemBorderRadius: 0,
+        itemFontScale: 0.62,
+        titleFontScale: 0.52,
+        panelPadding: 8,
+        terminalHeader: true,
+        selectedFill: 'rgba(45,212,191,0.12)',
+        showSelectionMarker: true,
+        marker: '$',
+        progressTop: '80%',
+        progressWidth: '68%',
+      };
+    case 'modern-glass':
+    default:
+      return base;
+  }
 };
 
 const getAllIconTypes = (customIconTypes: CustomIconType[]) => [...ICON_TYPES, ...customIconTypes];
@@ -863,6 +1078,8 @@ function App() {
   const detectedEntryIcon = inferPreviewIcon(`${newEntryAlias} ${newEntryName} ${newEntryPath}`, customIconTypes, config.iconFiles);
   const previewItems = getPreviewItems(config, customIconTypes);
   const previewAnimationClass = getPreviewAnimationClass(config.menuAnimation);
+  const previewMenuStyle = getPreviewMenuStyle(config);
+  const activeMenuStylePreset = MENU_STYLE_PRESETS.find((preset) => preset.id === config.menuStyle) ?? MENU_STYLE_PRESETS[1];
   const backgroundPreview = buildBackgroundPreviewUrl(config.backgroundSource, config.backgroundFile);
   const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
   const currentWizardIndex = WIZARD_STEPS.findIndex((step) => step.value === wizardStep);
@@ -1023,6 +1240,15 @@ function App() {
       ...theme.config,
     }));
     toast.success(`Applied ${theme.name} community theme!`);
+  };
+
+  const applyMenuStylePreset = (preset: MenuStylePreset) => {
+    setConfig((prev) => ({
+      ...prev,
+      ...preset.config,
+      menuStyle: preset.id,
+    }));
+    toast.success(`${preset.name} style applied!`);
   };
 
   const selectBuiltInBackground = (background: BuiltInBackground) => {
@@ -1682,6 +1908,16 @@ function App() {
                       <Image className="mr-1.5 h-3.5 w-3.5" />
                       Backgrounds
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setActiveTab('layout')}
+                      className="h-8 rounded-full border-[#30363d] bg-[#0d1117] px-3 text-xs text-[#c9d1d9] hover:bg-[#21262d]"
+                    >
+                      <Layout className="mr-1.5 h-3.5 w-3.5" />
+                      Menu Styles
+                    </Button>
                   </div>
 
                   <TooltipProvider>
@@ -2276,6 +2512,70 @@ function App() {
 
                 {/* Layout Tab */}
                 <TabsContent value="layout" className="space-y-4 mt-0">
+                  <div className="rounded-2xl border border-[#58a6ff]/20 bg-[#0d1117] p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <Label className="text-[#58a6ff] text-sm">Multiple Menu Styles</Label>
+                        <p className="mt-1 text-xs text-[#8b949e]">
+                          Yahin par `Classic BIOS`, `Modern Glass`, `Compact List`, `Centered Arcade`, aur `Minimal Terminal` milenge.
+                        </p>
+                      </div>
+                      <div className="rounded-full border border-[#30363d] bg-[#161b22] px-3 py-1 text-[11px] font-medium text-[#c9d1d9]">
+                        Active: {activeMenuStylePreset.name}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[#58a6ff] text-sm">Menu Styles</Label>
+                    <p className="text-xs text-[#8b949e]">
+                      Apply a ready-made layout style, then fine-tune spacing, resolution, and text below.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {MENU_STYLE_PRESETS.map((preset) => {
+                      const isActive = config.menuStyle === preset.id;
+
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => applyMenuStylePreset(preset)}
+                          className={`rounded-2xl border p-4 text-left transition-all ${
+                            isActive
+                              ? 'border-[#58a6ff] bg-[#161b22] shadow-lg shadow-blue-500/10'
+                              : 'border-[#30363d] bg-[#0d1117] hover:border-[#58a6ff]'
+                          }`}
+                        >
+                          <div className="mb-3 flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-sm font-semibold text-[#e6edf3]">{preset.name}</h3>
+                              <p className="mt-1 text-xs leading-5 text-[#8b949e]">{preset.summary}</p>
+                            </div>
+                            <span
+                              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                              style={{ borderColor: `${preset.accent}66`, color: preset.accent }}
+                            >
+                              {isActive ? 'Active' : 'Preset'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#6e7681]">
+                            {preset.id === 'classic-bios' && 'Square edges, no icons, BIOS feel'}
+                            {preset.id === 'modern-glass' && 'Rounded blur panel with glow'}
+                            {preset.id === 'compact-list' && 'Narrow dense list for more items'}
+                            {preset.id === 'centered-arcade' && 'Centered neon stage with dramatic framing'}
+                            {preset.id === 'minimal-terminal' && 'Wide monospace strip with terminal mood'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="rounded-2xl border border-[#30363d] bg-[#0d1117] px-4 py-3 text-xs text-[#8b949e]">
+                    Active style: <span className="font-medium text-[#c9d1d9]">{activeMenuStylePreset.name}</span>
+                  </div>
+
                   <div className="space-y-3">
                     {[
                       { key: 'menuLeft', label: 'Menu Left', min: 0, max: 100 },
@@ -2345,6 +2645,7 @@ function App() {
                     <ul className="mt-2 space-y-2 text-xs text-[#8b949e]">
                       <li>Background: {config.backgroundFile ? 'selected' : 'color only'}</li>
                       <li>Header: {config.headerText || 'Ventoy Boot Menu'}</li>
+                      <li>Menu style: {activeMenuStylePreset.name}</li>
                       <li>Fonts: {config.titleFont} / {config.itemFont}</li>
                       <li>Layout: {config.menuWidth}% width at {config.menuLeft}%, {config.menuTop}%</li>
                     </ul>
@@ -2576,7 +2877,7 @@ function App() {
                     className="absolute top-2 sm:top-4 left-0 right-0 text-center font-bold px-2 sm:px-4 truncate"
                     style={{ 
                       color: config.headerColor,
-                      fontSize: `${config.titleFontSize * 0.6}px`,
+                      fontSize: `${config.titleFontSize * previewMenuStyle.titleFontScale}px`,
                       fontFamily: config.titleFont,
                       textShadow: config.glowEffect ? `0 0 10px ${config.primaryColor}` : undefined,
                     }}
@@ -2593,27 +2894,45 @@ function App() {
                       width: `${config.menuWidth}%`,
                       height: `${config.menuHeight}%`,
                       borderColor: config.primaryColor,
-                      backgroundColor: config.glassEffect ? 'rgba(13, 17, 23, 0.85)' : 'rgba(13, 17, 23, 0.98)',
-                      borderWidth: '2px',
+                      backgroundColor: previewMenuStyle.panelBackground,
+                      borderWidth: `${previewMenuStyle.borderWidth}px`,
                       borderStyle: 'solid',
-                      borderRadius: config.roundedCorners ? '12px' : '0px',
-                      boxShadow: config.glowEffect ? `0 0 30px ${config.primaryColor}40, inset 0 0 30px ${config.primaryColor}10` : '0 10px 40px rgba(0,0,0,0.5)',
-                      backdropFilter: config.glassEffect ? 'blur(10px)' : undefined,
+                      borderRadius: `${previewMenuStyle.borderRadius}px`,
+                      boxShadow: previewMenuStyle.boxShadow,
+                      backdropFilter: previewMenuStyle.backdropFilter,
                     }}
                   >
-                    <div className="p-2 sm:p-3 space-y-0.5 sm:space-y-1">
+                    {previewMenuStyle.terminalHeader && (
+                      <div
+                        className="border-b px-2 py-1 text-[8px] uppercase tracking-[0.22em] sm:text-[9px]"
+                        style={{ borderColor: `${config.primaryColor}55`, color: config.primaryColor }}
+                      >
+                        boot://ventoy/session
+                      </div>
+                    )}
+                    <div
+                      className="space-y-0.5 sm:space-y-1"
+                      style={{ padding: `${previewMenuStyle.panelPadding}px` }}
+                    >
                       {previewItems.map((item, i) => (
                         <div
                           key={i}
-                          className="flex items-center gap-1.5 sm:gap-2 px-1.5 sm:px-2 py-1 sm:py-1.5 transition-all"
+                          className="flex items-center transition-all"
                           style={{ 
                             color: i === 0 ? config.selectedTextColor : config.normalTextColor,
-                            backgroundColor: i === 0 ? `${config.primaryColor}60` : 'transparent',
-                            borderRadius: config.roundedCorners ? '6px' : '0px',
-                            fontSize: `${config.itemFontSize * 0.7}px`,
+                            backgroundColor: i === 0 ? previewMenuStyle.selectedFill : 'transparent',
+                            borderRadius: `${previewMenuStyle.itemBorderRadius}px`,
+                            fontSize: `${config.itemFontSize * previewMenuStyle.itemFontScale}px`,
                             fontFamily: config.itemFont,
+                            gap: `${previewMenuStyle.itemGap}px`,
+                            padding: `${previewMenuStyle.itemPaddingY}px ${previewMenuStyle.itemPaddingX}px`,
                           }}
                         >
+                          {previewMenuStyle.showSelectionMarker && (
+                            <span style={{ color: i === 0 ? config.primaryColor : `${config.normalTextColor}99` }}>
+                              {i === 0 ? previewMenuStyle.marker : '·'}
+                            </span>
+                          )}
                           {config.showIcons && (
                             iconPreviews[item.icon] ? (
                               <img
@@ -2646,8 +2965,8 @@ function App() {
                       <div
                         className="absolute left-1/2 -translate-x-1/2 h-2 sm:h-4 rounded-full overflow-hidden border"
                         style={{ 
-                          top: '82%',
-                          width: '60%',
+                          top: previewMenuStyle.progressTop,
+                          width: previewMenuStyle.progressWidth,
                           backgroundColor: config.progressBgColor,
                           borderColor: config.primaryColor,
                           borderRadius: config.roundedCorners ? '999px' : '0px',
