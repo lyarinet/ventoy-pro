@@ -1046,14 +1046,6 @@ function generateVentoyJson(config) {
     }
   });
 
-  Object.entries(iconMappings).forEach(([type, data]) => {
-    if (data.file) {
-      data.keys.forEach(key => {
-        addMenuClassEntry(menuClass, seenMenuClassEntries, key, type);
-      });
-    }
-  });
-
   customEntries.forEach((entry) => {
     if (!entry?.icon || !getIconAssetSource(entry.icon, iconFiles[entry.icon], customIconTypes)) {
       return;
@@ -1062,6 +1054,14 @@ function generateVentoyJson(config) {
     getCustomEntryKeys(entry).forEach((key) => {
       addMenuClassEntry(menuClass, seenMenuClassEntries, key, entry.icon);
     });
+  });
+
+  Object.entries(iconMappings).forEach(([type, data]) => {
+    if (data.file) {
+      data.keys.forEach(key => {
+        addMenuClassEntry(menuClass, seenMenuClassEntries, key, type);
+      });
+    }
   });
 
   // Build menu_alias from custom entries

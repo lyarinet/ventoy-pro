@@ -20,7 +20,10 @@ import { toJpeg, toPng } from 'html-to-image';
 import './App.css';
 
 // API base URL
-const API_URL = 'http://localhost:3001';
+const API_URL = (
+  import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '') ||
+  (import.meta.env.DEV ? 'http://localhost:3001' : '')
+);
 
 const resolveServerAssetUrl = (assetUrl: string) => {
   if (!assetUrl) {
@@ -3637,7 +3640,7 @@ function App() {
                             <option value="auto">Auto Detect</option>
                             {availableIconTypes.map((icon) => (
                               <option key={icon.id} value={icon.id}>
-                                {icon.name}
+                                {`${icon.name} — ${getIconStatusLabel(icon.id)}`}
                               </option>
                             ))}
                           </select>
@@ -3665,46 +3668,71 @@ function App() {
 
                     {config.customEntries.length > 0 && (
                       <div className="space-y-2 mt-3">
-                        {config.customEntries.map((entry, idx) => (
+                        {config.customEntries.map((entry, idx) => {
+                          const resolvedIcon = getResolvedEntryIcon(entry);
+                          const isManualOverride = Boolean(entry.icon);
+
+                          return (
                           <div key={idx} className="flex items-center justify-between p-2 bg-[#0d1117] rounded-lg border border-[#30363d]">
                             <div className="flex min-w-0 items-center gap-3">
-                              {iconPreviews[getResolvedEntryIcon(entry)] ? (
+                              {iconPreviews[resolvedIcon] ? (
                                 <img
-                                  src={iconPreviews[getResolvedEntryIcon(entry)]}
-                                  alt={getResolvedEntryIcon(entry)}
+                                  src={iconPreviews[resolvedIcon]}
+                                  alt={resolvedIcon}
                                   className="h-5 w-5 flex-shrink-0 object-contain"
                                 />
-                              ) : customIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry)) ? (
+                              ) : customIconTypes.find((icon) => icon.id === resolvedIcon) ? (
                                 <div
                                   className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-                                  style={{ backgroundColor: customIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.color }}
+                                  style={{ backgroundColor: customIconTypes.find((icon) => icon.id === resolvedIcon)?.color }}
                                 >
                                   {entry.alias.charAt(0).toUpperCase()}
                                 </div>
                               ) : (
-                                <div className="flex-shrink-0" style={{ color: availableIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.color }}>
-                                  <OSLogo type={getResolvedEntryIcon(entry)} size={18} />
+                                <div className="flex-shrink-0" style={{ color: availableIconTypes.find((icon) => icon.id === resolvedIcon)?.color }}>
+                                  <OSLogo type={resolvedIcon} size={18} />
                                 </div>
                               )}
                               <div className="min-w-0 text-xs">
-                                <p className="truncate text-[#c9d1d9] font-medium">{entry.alias}</p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className={`truncate font-medium ${isManualOverride ? 'text-white' : 'text-[#c9d1d9]'}`}>{entry.alias}</p>
+                                  {isManualOverride && (
+                                    <span className="rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#fbbf24]">
+                                      Manual Override
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="truncate text-[#6e7681]">{entry.path}</p>
-                                <p className="text-[#58a6ff]">Icon: {availableIconTypes.find((icon) => icon.id === getResolvedEntryIcon(entry))?.name ?? 'Generic'}</p>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-[#58a6ff]">Icon: {availableIconTypes.find((icon) => icon.id === resolvedIcon)?.name ?? 'Generic'}</p>
+                                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${getIconStatusClasses(resolvedIcon)}`}>
+                                    {getIconStatusLabel(resolvedIcon)}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                             <div className="ml-3 flex items-center gap-2">
                               <select
-                                value={getResolvedEntryIcon(entry)}
+                                value={resolvedIcon}
                                 onChange={(e) => updateCustomEntryIcon(idx, e.target.value)}
-                                className="max-w-[140px] rounded-md border border-[#30363d] bg-[#161b22] px-2 py-1 text-xs text-[#c9d1d9]"
+                                className={`max-w-[170px] rounded-md border px-2 py-1 text-xs ${
+                                  isManualOverride
+                                    ? 'border-[#f59e0b]/40 bg-[#2a1f10] text-[#fbbf24]'
+                                    : 'border-[#30363d] bg-[#161b22] text-[#c9d1d9]'
+                                }`}
                               >
                                 <option value="auto">Auto Detect</option>
                                 {availableIconTypes.map((icon) => (
                                   <option key={icon.id} value={icon.id}>
-                                    {icon.name}
+                                    {`${icon.name} — ${getIconStatusLabel(icon.id)}`}
                                   </option>
                                 ))}
                               </select>
+                              {isManualOverride && (
+                                <span className="rounded-full border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#fbbf24]">
+                                  Locked
+                                </span>
+                              )}
                               <Button variant="ghost" size="sm" onClick={() => editCustomEntry(idx)} className="text-[#58a6ff] hover:text-white hover:bg-[#1f6feb]/20">
                                 <Pencil className="w-4 h-4" />
                               </Button>
@@ -3713,7 +3741,7 @@ function App() {
                               </Button>
                             </div>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
                   </div>

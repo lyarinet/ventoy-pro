@@ -82,6 +82,52 @@ npm run server
    - Server URL: `http://localhost:3001`
    - The app will be available immediately
 
+## 🌐 Deployment
+
+### Netlify Frontend + Separate Backend
+
+This project now supports a clean deployment split:
+
+- `Frontend`: deploy to `Netlify`
+- `Backend/API`: deploy `server/server.js` to a Node host such as `Render`, `Railway`, or `Fly.io`
+- `Database`: keep the backend database on the backend host
+
+Important:
+
+- `Netlify` is great for the React frontend
+- the current `Express + SQLite` backend should **not** be hosted as a static Netlify site
+- for production, set `VITE_API_URL` in Netlify to your backend URL
+
+Example Netlify environment variable:
+
+```bash
+VITE_API_URL=https://your-backend.example.com
+```
+
+### Netlify Build Settings
+
+- Build command: `npm run build`
+- Publish directory: `dist`
+
+### Local Env Example
+
+Copy `.env.example` to `.env` if needed:
+
+```bash
+cp .env.example .env
+```
+
+### Why This Split Is Recommended
+
+The frontend is fully Netlify-compatible now, but the backend needs persistent server-side storage for:
+
+- auth sessions
+- shared themes
+- uploaded files
+- SQLite data
+
+That production data should live on the backend host, not on a static frontend deployment.
+
 ## 📖 Usage Guide
 
 ### Creating Your First Theme
