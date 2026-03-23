@@ -6,8 +6,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const dataDir = path.join(__dirname, 'data');
-export const DB_PATH = path.join(dataDir, 'ventoy.db');
+const defaultDataDir = path.join(__dirname, 'data');
+export const dataDir = process.env.DATA_DIR || process.env.APP_DATA_DIR || defaultDataDir;
+export const DB_PATH = process.env.DB_PATH || path.join(dataDir, 'ventoy.db');
 
 const usersFile = path.join(dataDir, 'users.json');
 const themesFile = path.join(dataDir, 'themes.json');
