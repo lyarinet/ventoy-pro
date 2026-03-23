@@ -360,7 +360,7 @@ function App() {
       // Load last used config
       const lastConfigStr = localStorage.getItem('ventoyLastConfig');
       if (lastConfigStr) {
-        const lastConfig = JSON.parse(lastConfigStr);
+        JSON.parse(lastConfigStr);
         // Optionally auto-load the last config
         // setConfig(lastConfig.config);
         // toast.info(`Last config available: ${lastConfig.name}`);
