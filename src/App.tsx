@@ -140,6 +140,7 @@ interface BuiltInBackground {
   summary: string;
   filename: string;
   accent: string;
+  plainFilename?: string;
 }
 
 interface MenuStylePreset {
@@ -408,6 +409,7 @@ const BUILT_IN_BACKGROUNDS: BuiltInBackground[] = [
     summary: 'Polished metallic panel with neon edge lighting.',
     filename: 'tech-frame.png',
     accent: '#a78bfa',
+    plainFilename: 'tech-frame-clean.png',
   },
 ];
 
@@ -686,6 +688,9 @@ type ThemeConfig = {
   roundedCorners: boolean;
   glassEffect: boolean;
   glowEffect: boolean;
+  menuFrameEffect: boolean;
+  selectedItemBoxEffect: boolean;
+  backgroundCenterFrameEffect: boolean;
   
   // Security
   passwordProtected: boolean;
@@ -737,6 +742,9 @@ const DEFAULT_CONFIG: ThemeConfig = {
   roundedCorners: true,
   glassEffect: true,
   glowEffect: true,
+  menuFrameEffect: true,
+  selectedItemBoxEffect: true,
+  backgroundCenterFrameEffect: true,
   
   passwordProtected: false,
   menuPassword: '',
@@ -787,18 +795,40 @@ const normalizeConfig = (storedConfig?: Partial<ThemeConfig> | null): ThemeConfi
       }))
     : [],
   iconFiles: storedConfig?.iconFiles ?? {},
+  menuFrameEffect: storedConfig?.menuFrameEffect ?? DEFAULT_CONFIG.menuFrameEffect,
+  selectedItemBoxEffect: storedConfig?.selectedItemBoxEffect ?? DEFAULT_CONFIG.selectedItemBoxEffect,
+  backgroundCenterFrameEffect: storedConfig?.backgroundCenterFrameEffect ?? DEFAULT_CONFIG.backgroundCenterFrameEffect,
 });
+
+const getEffectiveBuiltInBackgroundFilename = (
+  filename?: string,
+  backgroundCenterFrameEffect = true
+) => {
+  const safeFilename = getBuiltInBackgroundFilename(filename);
+
+  if (!safeFilename) {
+    return safeFilename;
+  }
+
+  const matchedBackground = BUILT_IN_BACKGROUNDS.find((background) => background.filename === safeFilename);
+  if (!matchedBackground?.plainFilename || backgroundCenterFrameEffect) {
+    return safeFilename;
+  }
+
+  return matchedBackground.plainFilename;
+};
 
 const buildBackgroundPreviewUrl = (
   source: ThemeConfig['backgroundSource'],
-  filename?: string
+  filename?: string,
+  backgroundCenterFrameEffect = true
 ) => {
   if (!filename) {
     return null;
   }
 
   return source === 'builtin'
-    ? `/backgrounds/${getBuiltInBackgroundFilename(filename)}`
+    ? `/backgrounds/${getEffectiveBuiltInBackgroundFilename(filename, backgroundCenterFrameEffect)}`
     : `${API_URL}/uploads/backgrounds/${filename}`;
 };
 
@@ -872,13 +902,17 @@ const getPreviewAnimationClass = (animation: string) => {
 
 const getPreviewMenuStyle = (config: ThemeConfig) => {
   const base = {
-    panelBackground: config.glassEffect ? 'rgba(13, 17, 23, 0.85)' : 'rgba(13, 17, 23, 0.98)',
-    borderWidth: 2,
+    panelBackground: config.menuFrameEffect
+      ? (config.glassEffect ? 'rgba(13, 17, 23, 0.85)' : 'rgba(13, 17, 23, 0.98)')
+      : 'transparent',
+    borderWidth: config.menuFrameEffect ? 2 : 0,
     borderRadius: config.roundedCorners ? 12 : 0,
-    boxShadow: config.glowEffect
+    boxShadow: config.menuFrameEffect
+      ? (config.glowEffect
       ? `0 0 30px ${config.primaryColor}40, inset 0 0 30px ${config.primaryColor}10`
-      : '0 10px 40px rgba(0,0,0,0.5)',
-    backdropFilter: config.glassEffect ? 'blur(10px)' : undefined,
+      : '0 10px 40px rgba(0,0,0,0.5)')
+      : 'none',
+    backdropFilter: config.menuFrameEffect && config.glassEffect ? 'blur(10px)' : undefined,
     itemPaddingX: 8,
     itemPaddingY: 6,
     itemGap: 8,
@@ -889,7 +923,7 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     progressTop: '82%',
     progressWidth: '60%',
     terminalHeader: false,
-    selectedFill: `${config.primaryColor}60`,
+    selectedFill: config.selectedItemBoxEffect ? `${config.primaryColor}60` : 'transparent',
     showSelectionMarker: false,
     marker: '>',
   };
@@ -898,10 +932,10 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     case 'classic-bios':
       return {
         ...base,
-        panelBackground: 'rgba(7, 12, 27, 0.98)',
-        borderWidth: 1,
+        panelBackground: config.menuFrameEffect ? 'rgba(7, 12, 27, 0.98)' : 'transparent',
+        borderWidth: config.menuFrameEffect ? 1 : 0,
         borderRadius: 0,
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+        boxShadow: config.menuFrameEffect ? 'inset 0 0 0 1px rgba(255,255,255,0.06)' : 'none',
         backdropFilter: undefined,
         itemPaddingX: 6,
         itemPaddingY: 4,
@@ -909,16 +943,16 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
         itemBorderRadius: 0,
         titleFontScale: 0.56,
         panelPadding: 10,
-        selectedFill: 'rgba(255,255,255,0.08)',
+        selectedFill: config.selectedItemBoxEffect ? 'rgba(255,255,255,0.08)' : 'transparent',
         showSelectionMarker: true,
         marker: '>',
       };
     case 'compact-list':
       return {
         ...base,
-        panelBackground: 'rgba(9, 14, 22, 0.96)',
-        borderWidth: 1,
-        boxShadow: '0 12px 28px rgba(0,0,0,0.45)',
+        panelBackground: config.menuFrameEffect ? 'rgba(9, 14, 22, 0.96)' : 'transparent',
+        borderWidth: config.menuFrameEffect ? 1 : 0,
+        boxShadow: config.menuFrameEffect ? '0 12px 28px rgba(0,0,0,0.45)' : 'none',
         itemPaddingX: 6,
         itemPaddingY: 4,
         itemGap: 6,
@@ -930,10 +964,12 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     case 'centered-arcade':
       return {
         ...base,
-        panelBackground: 'rgba(8, 10, 24, 0.92)',
-        borderWidth: 3,
+        panelBackground: config.menuFrameEffect ? 'rgba(8, 10, 24, 0.92)' : 'transparent',
+        borderWidth: config.menuFrameEffect ? 3 : 0,
         borderRadius: 16,
-        boxShadow: `0 0 36px ${config.primaryColor}55, inset 0 0 24px ${config.accentColor}22`,
+        boxShadow: config.menuFrameEffect
+          ? `0 0 36px ${config.primaryColor}55, inset 0 0 24px ${config.accentColor}22`
+          : 'none',
         itemPaddingX: 10,
         itemPaddingY: 7,
         itemGap: 9,
@@ -946,10 +982,10 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
     case 'minimal-terminal':
       return {
         ...base,
-        panelBackground: 'rgba(4, 10, 12, 0.98)',
-        borderWidth: 1,
+        panelBackground: config.menuFrameEffect ? 'rgba(4, 10, 12, 0.98)' : 'transparent',
+        borderWidth: config.menuFrameEffect ? 1 : 0,
         borderRadius: 0,
-        boxShadow: '0 0 0 1px rgba(45,212,191,0.16)',
+        boxShadow: config.menuFrameEffect ? '0 0 0 1px rgba(45,212,191,0.16)' : 'none',
         backdropFilter: undefined,
         itemPaddingX: 4,
         itemPaddingY: 3,
@@ -959,7 +995,7 @@ const getPreviewMenuStyle = (config: ThemeConfig) => {
         titleFontScale: 0.52,
         panelPadding: 8,
         terminalHeader: true,
-        selectedFill: 'rgba(45,212,191,0.12)',
+        selectedFill: config.selectedItemBoxEffect ? 'rgba(45,212,191,0.12)' : 'transparent',
         showSelectionMarker: true,
         marker: '$',
         progressTop: '80%',
@@ -1204,7 +1240,11 @@ function App() {
   const activeMenuStylePreset = MENU_STYLE_PRESETS.find((preset) => preset.id === config.menuStyle) ?? MENU_STYLE_PRESETS[1];
   const activeTabMeta = TAB_ITEMS.find((item) => item.value === activeTab);
   const activeWizardMeta = WIZARD_STEPS.find((step) => step.value === activeTab || step.value === wizardStep);
-  const backgroundPreview = buildBackgroundPreviewUrl(config.backgroundSource, config.backgroundFile);
+  const backgroundPreview = buildBackgroundPreviewUrl(
+    config.backgroundSource,
+    config.backgroundFile,
+    config.backgroundCenterFrameEffect
+  );
   const totalMarketplacePages = Math.max(1, Math.ceil(marketplaceThemes.length / MARKETPLACE_PAGE_SIZE));
   const currentWizardIndex = WIZARD_STEPS.findIndex((step) => step.value === wizardStep);
   const currentWizardStep = WIZARD_STEPS[currentWizardIndex] ?? WIZARD_STEPS[0];
@@ -2486,7 +2526,7 @@ function App() {
                           top: `${config.menuTop}%`,
                           width: `${config.menuWidth}%`,
                           height: `${config.menuHeight}%`,
-                          borderColor: config.primaryColor,
+                          borderColor: config.menuFrameEffect ? config.primaryColor : 'transparent',
                           backgroundColor: previewMenuStyle.panelBackground,
                           borderWidth: `${previewMenuStyle.borderWidth}px`,
                           borderStyle: 'solid',
@@ -3311,6 +3351,9 @@ function App() {
                         { key: 'showProgressBar', label: 'Progress Bar' },
                         { key: 'showFooter', label: 'Footer Text' },
                         { key: 'roundedCorners', label: 'Rounded Corners' },
+                        { key: 'menuFrameEffect', label: 'Menu Frame Box' },
+                        { key: 'selectedItemBoxEffect', label: 'Selected Item Box' },
+                        { key: 'backgroundCenterFrameEffect', label: 'BG Center Frame' },
                         { key: 'glassEffect', label: 'Glass Effect' },
                         { key: 'glowEffect', label: 'Glow Effect' },
                       ].map(({ key, label }) => (

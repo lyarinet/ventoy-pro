@@ -77,6 +77,7 @@ const iconsDir = path.join(uploadsDir, 'icons');
 const brandingDir = path.join(uploadsDir, 'branding');
 const outputDir = path.join(__dirname, 'output');
 const builtInBackgroundsDir = path.join(__dirname, '..', 'public', 'backgrounds');
+const themeAssetsDir = path.join(__dirname, 'theme-assets');
 const dataDir = path.join(__dirname, 'data');
 
 [uploadsDir, backgroundsDir, iconsDir, brandingDir, outputDir, dataDir].forEach(dir => {
@@ -546,9 +547,22 @@ app.post('/api/download/theme', async (req, res) => {
 
     // Add background image
     const backgroundRoot = config.backgroundSource === 'builtin' ? builtInBackgroundsDir : backgroundsDir;
-    const safeBackgroundFile = getVentoySafeBackgroundFile(config.backgroundFile);
+    const safeBackgroundFile = getVentoySafeBackgroundFile(
+      config.backgroundFile,
+      config.backgroundSource,
+      config.backgroundCenterFrameEffect
+    );
     if (safeBackgroundFile && fs.existsSync(path.join(backgroundRoot, safeBackgroundFile))) {
       archive.file(path.join(backgroundRoot, safeBackgroundFile), { name: `${themeRoot}/backgrounds/${safeBackgroundFile}` });
+    }
+
+    // Add Ventoy-safe theme UI slice assets used by theme.txt
+    if (fs.existsSync(themeAssetsDir)) {
+      fs.readdirSync(themeAssetsDir)
+        .filter((filename) => filename.toLowerCase().endsWith('.png'))
+        .forEach((filename) => {
+          archive.file(path.join(themeAssetsDir, filename), { name: `${themeRoot}/${filename}` });
+        });
     }
 
     // Add icons
@@ -578,7 +592,11 @@ app.get('/api/status', (req, res) => {
 // ==================== THEME GENERATION FUNCTIONS ====================
 
 function generateThemeTxt(config) {
-  const safeBackgroundFile = getVentoySafeBackgroundFile(config.backgroundFile);
+  const safeBackgroundFile = getVentoySafeBackgroundFile(
+    config.backgroundFile,
+    config.backgroundSource,
+    config.backgroundCenterFrameEffect
+  );
   const safeHeaderText = toVentoySafeAscii(config.headerText || 'Ventoy Boot Menu', 'Ventoy Boot Menu');
   const {
     desktopColor = '#0d1117',
@@ -592,11 +610,16 @@ function generateThemeTxt(config) {
     menuWidth = 50,
     menuHeight = 45,
     itemFontSize = 16,
+    progressBgColor = '#21262d',
+    progressFgColor = '#238636',
     showProgressBar = true,
     showFooter = true,
+    menuFrameEffect = true,
+    selectedItemBoxEffect = true,
   } = config;
   const safeFont = 'ascii';
   const safeItemFontSize = Math.min(Math.max(itemFontSize, 12), 32);
+  const safeItemHeight = Math.max(42, safeItemFontSize + 16);
 
   return `# ============================================
 # Lyaritech Ventoy Pro Theme Configuration for Ventoy
@@ -639,17 +662,19 @@ menu-tip-color: "${footerColor}"
     selected_item_color = "${selectedTextColor}"
     
     # Icon settings
-    icon_width = 32
-    icon_height = 32
-    item_icon_space = 12
+    icon_width = 24
+    icon_height = 24
+    item_icon_space = 10
     
     # Item spacing
-    item_height = ${Math.max(36, safeItemFontSize + 16)}
-    item_padding = 8
-    item_spacing = 4
+    item_height = ${safeItemHeight}
+    item_padding = 10
+    item_spacing = 8
+    ${menuFrameEffect ? 'menu_pixmap_style = "menu_*.png"' : '# menu frame box disabled'}
+    ${selectedItemBoxEffect ? 'selected_item_pixmap_style = "selected_item_*.png"' : '# selected item box disabled'}
 
     # Safe default style
-    scrollbar = true
+    scrollbar = false
 }
 
 # ============================================
@@ -658,13 +683,18 @@ menu-tip-color: "${footerColor}"
 ${showProgressBar ? `+ progress_bar {
     id = "__timeout__"
     left = 20%
-    top = 85%
+    top = 83%
     width = 60%
-    height = 3%
-    text = "@TIMEOUT_NOTIFICATION_SHORT@"
+    height = 26
+    text = "@TIMEOUT_NOTIFICATION_MIDDLE@"
+    font = "${safeFont}"
+    fg_color = "${progressFgColor}"
+    bg_color = "${progressBgColor}"
+    border_color = "${primaryColor}"
     text_color = "${normalTextColor}"
-    bar_style = "*"
-    highlight_style = "*"
+    bar_style = "progress_frame_*.png"
+    highlight_style = "progress_hl_*.png"
+    highlight_overlay = true
 }` : '# Progress bar disabled'}
 
 # ============================================
@@ -672,7 +702,7 @@ ${showProgressBar ? `+ progress_bar {
 # ============================================
 ${showFooter ? `+ label {
     left = 0
-    top = 95%
+    top = 91%
     width = 100%
     height = 20
     text = "Use UP/DOWN to select, ENTER to boot"
@@ -732,7 +762,22 @@ function getCustomEntryKeys(entry) {
   return [...keys].filter(Boolean);
 }
 
-function getVentoySafeBackgroundFile(filename) {
+function getVentoySafeBackgroundFile(filename, source = 'upload', backgroundCenterFrameEffect = true) {
+  if (source === 'builtin') {
+    let effectiveFilename = String(filename || '');
+
+    if (/tech-frame\.(png|svg|jpg|jpeg)$/i.test(effectiveFilename) && !backgroundCenterFrameEffect) {
+      effectiveFilename = effectiveFilename.replace(/tech-frame(\.(png|svg|jpg|jpeg))$/i, 'tech-frame-clean$1');
+    }
+
+    const jpegCandidate = effectiveFilename.replace(/\.(png|svg)$/i, '.jpg');
+    if (jpegCandidate && jpegCandidate !== filename && fs.existsSync(path.join(builtInBackgroundsDir, jpegCandidate))) {
+      return jpegCandidate;
+    }
+
+    filename = effectiveFilename;
+  }
+
   if (String(filename || '').toLowerCase().endsWith('.svg')) {
     return filename.replace(/\.svg$/i, '.png');
   }
